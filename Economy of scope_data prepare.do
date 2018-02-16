@@ -253,9 +253,12 @@ Step 5: Clean data for nodrug paper
 
 	global arm "nodrug*"
 	
-	des $process $diagnosis $treatment $control1 $control2 $control3 $arm 
+	global chi_meds "thc_t_v_Q9_9 vc_t_v_Q9_9 ch_t_v_Q9_9 thc_t_v_Q9_10 vc_t_v_Q9_10 ch_t_v_Q9_10"
+	
+	des $process $diagnosis $treatment $control1 $control2 $control3 $arm $chi_meds
+	
 	keep $process $diagnosis $treatment $control1 $control2 $control3 $arm ///
-		type patientload drugfee totfee thc_id vc_id
+		type patientload drugfee totfee thc_id $chi_meds
 
 
 	compress

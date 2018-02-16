@@ -7,7 +7,8 @@ set logtype t
 * Project: 			Economy of Scope
 * Goal: 			Drug profitability ratingsn
 * Input data:		profit_ratings.dta
-* Output: 			profit_ratings_agreement.xlsx
+* Output: 			profit_ratings_agreement.xlsx (for inter-rater reliability)
+*					high_profit_drugs.dta (for final ratings for each drug)
 * Notes:			Some codes from Sophie Sun (step 1 & 2)
 
 * Created by:		Wei Chang
@@ -97,8 +98,22 @@ drop 未央宫社区服务站
 
 ****** 3. create rating index based on "reliable" raters
 
-pca 未央宫个体诊所1-未央宫个体诊所2 彩石镇卫生院-彩石镇村卫生室3
-predict profit_index 
+
+global raters 未央宫个体诊所1 未央宫村卫生室1 未央宫村卫生室2 未央宫个体诊所2 彩石镇卫生院 彩石镇村卫生室1 彩石镇村卫生室2 彩石镇村卫生室3
+
+* impute missing values in the ratings
+	egen rating_mean = rowmean($raters) 
+	label var rating_mean "mean of nonmissing ratings"
+	
+	foreach r of global raters {
+		gen `r'_imputed = `r'
+		replace `r'_imputed = rating_mean if `r'_imputed ==.
+		label var `r'_imputed "`r'-missing replaced with mean"
+		}
+		
+
+polychoricpca  *_imputed, score(profit_index) nscore(1)
+
 
 * define high-profit drugs as index score > median
 	sum profit_index,d
@@ -106,15 +121,22 @@ predict profit_index
 	gen high_profit = .
 	replace high_profit = 1 if profit_index > `med' & !missing(profit_index)
 	replace high_profit = 0 if profit_index <= `med'
-	label var high_profit "high profit drugs"
+	label var high_profit "dummy for high profit drugs"
 	label define lhigh_profit 1 "profit index > p50" 0 "profit index <= p50"
 	label values high_profit lhigh_profit
 	tab high_profit
+	
+* create datafile of drug profit ratings
+	rename 药品名称 med_name
+	save "$dir/data/high_profit_drugs.dta", replace
+		use "$dir/data/high_profit_drugs.dta", clear
 
-
-//? what to do with the missing in ratings (no index generated)? Almost half of the drugs.
-
-
+******** 4. merge ratings with the drug dataset
+	
+	use "$dir/raw/drugdataset_final_SP2015.dta",clear
+	merge 1:1 med_name using "$dir/data/high_profit_drugs.dta", keepus(high_profit)
+	
+	***** need to clean the drug names ******
 
 
 log off
