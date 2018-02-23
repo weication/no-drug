@@ -7,6 +7,8 @@ set logtype t
 * Project: 			Economy of Scope
 * Goal: 			Data preparation
 * Input data:		SP_total_dataset_1oct2017.dta
+*					drugdataset_final_SP2015.dta
+
 * Output: 			nodrug_paper.dta
 * Notes:			Most codes are from Xuehao; extracted additional variables for the analysis
 
@@ -206,6 +208,35 @@ Step 3: Main outcome variables
 		{ 
 			count if `x' == . & type != 2
 		}
+	
+	
+	* high-profit drugs
+		* merge profit rating for each drug (med_code1 - med_code 11)
+		foreach n of numlist 1/11 {
+			rename med_code`n' med_code
+			merge m:1 med_code using "$dir/data/drugdataset_final_SP2015.dta", keepus(high_profit)
+			drop if _merge == 2
+			drop _merge
+			rename med_code med_code`n'
+			rename high_profit high_profit`n'
+			}
+		
+		* count number of high_profit* missing 
+		egen m_high_profit = rmiss(high_profit*)
+		
+		
+		* generate high-profit drug = 1 if any high-profit drug was given
+		egen any_high_profit = anymatch(high_profit*),v(1)
+		replace any_high_profit = . if m_high_profit == 11
+
+		label var any_high_profit "any high profit drug"
+		
+		* generate number of high-profit drugs prescribed
+		egen num_high_profit = rowtotal(high_profit*) if m_high_profit != 11
+		label var num_high_profit "number of high profit drugs"
+		
+		sum any_high_profit num_high_profit
+		tab any_high_profit, m
 		
 /*-------
 Step 4: Main control vars
@@ -258,7 +289,7 @@ Step 5: Clean data for nodrug paper
 	des $process $diagnosis $treatment $control1 $control2 $control3 $arm $chi_meds
 	
 	keep $process $diagnosis $treatment $control1 $control2 $control3 $arm ///
-		type patientload drugfee totfee thc_id $chi_meds
+		type patientload drugfee totfee $chi_meds any_high_profit num_high_profit
 
 
 	compress

@@ -7,6 +7,8 @@ set logtype t
 * Project: 			Economy to Scope
 * Goal: 			Data analysis
 * Input data:		nodrug_paper.dta
+
+* Output tables: 	economyofscope_results.csv
 * Result:			Econ_of_Scope_results.docx
 * Other files:		Analysis Plan for Econ of Scope.docx 
 
@@ -28,7 +30,7 @@ use "$dir/data/nodrug_paper.dta",clear
 * drop vignette type 2/Q10 observations
 	label list type
 	drop if type == 2
-
+	
 
 * recode string variables
 	encode disease, gen(diseasecode)
@@ -63,10 +65,26 @@ use "$dir/data/nodrug_paper.dta",clear
 	gen chi_med_m = .
 	replace chi_med_m = 0 if thc_t_v_Q9_10 == 0 | vc_t_v_Q9_10==0 | ch_t_v_Q9_10==0
 	replace chi_med_m = 1 if thc_t_v_Q9_10 == 1 | vc_t_v_Q9_10==1 | ch_t_v_Q9_10==1
-	label var chi_med_h "Chinese modern medicine"
+	label var chi_med_m "Chinese modern medicine"
 	label values chi_med_h yesno 
 
+
+* missing summary - SP visits
+	levelsof(level),local(level)
+	foreach l of local level {
+		di "`l'"
+		misstable sum if type == 0 & level == "`l'"
+		}
  	
+* missing for chinese herbal and chinese modern 
+	tab chi_med_h level if type ==0, m nof col
+	tab chi_med_m level if type ==0, m nof col
+	
+* missing for high profit ratings
+	tab any_high_profit level if type == 0, m col
+	tab num_high_profit level if type == 0, m nof col
+
+	
 *************************
 * Table 1 - Distributions/Experimental Designs
 *************************
@@ -118,6 +136,7 @@ use "$dir/data/nodrug_paper.dta",clear
 	label var actual_a "actual story_end"
 	
 
+	
 *************************
 * Table 2: Balance tables for each experiment
 *************************
@@ -224,9 +243,11 @@ use "$dir/data/nodrug_paper.dta",clear
 	cost of drugs --> cost of visit
 	# on EDL/Zero-profit drugs (national)
 	# off EDL/Zero-profit drugs (national)
-	Chinese modern
-	Chinese herbal
-	"High profit" Meds ??
+	Chinese modern ??
+	Chinese herbal ??
+	"High profit" Meds
+		any_high_profit ??
+		num_high_profit ??
 	*/
 	
 	* check the distribution of "number of drugs" - number of zeros
@@ -242,13 +263,13 @@ use "$dir/data/nodrug_paper.dta",clear
 	* drugfee: missing ~35% --> use total SP visit fee as outcome 
 	
 	
-	
 	global prescription = "numofdrug totfee numedl numnonedl"
 	
 * define covariates
 	global cvar_fe = "i.diseasecode i.group i.countycode"
 	global cvar = "i.irtscore_v_high i.income_high i.experience_high i.patientload_high i.totrev_high"
-	
+
+
 	
 * OLS & IV
 	
@@ -286,7 +307,7 @@ use "$dir/data/nodrug_paper.dta",clear
 			
 			* OLS - cluster at THC level for THC interactions
 			if "`l'" == "Township" {
-				eststo: reg `y' i.arm $cvar $cvar_fe if level == "`l'", vce(cluster thc_id)
+				eststo: reg `y' i.arm $cvar $cvar_fe if level == "`l'", vce(cluster towncode)
 				test 2.arm = 3.arm 
 				estadd scalar pval_bt_treatarm = `r(p)'
 				sum `y' if arm == 1 & e(sample) == 1 /* mean of the control arm */
@@ -296,7 +317,7 @@ use "$dir/data/nodrug_paper.dta",clear
 				estadd local MODEL = "OLS"
 				}
 			
-			* IV - arm assignment --> actual treatment (three arms)
+			* IV - arm assignment --> actual treatment (three arms) - THC
 			if "`l'" == "Township" {
 				eststo: ivregress gmm `y' (actual_b actual_a = nodrug_b nodrug_a) $cvar $cvar_fe if level == "`l'", robust
 				test actual_b = actual_a
@@ -308,6 +329,20 @@ use "$dir/data/nodrug_paper.dta",clear
 				estadd local SE = "robust"
 				estadd local MODEL = "IV"
 				}
+				
+			* IV - arm assignment --> actual treatment (three arms) - Migrant (too many missing for totfee)
+			if "`l'" == "Migrant" & `y' != totfee {
+				eststo: ivregress gmm `y' (actual_b actual_a = nodrug_b nodrug_a) $cvar $cvar_fe if level == "`l'", robust
+				test actual_b = actual_a
+				estadd scalar pval_bt_treatarm = `r(p)'
+				
+				sum `y' if arm == 1 & e(sample) == 1 /* mean of the control arm */
+				estadd scalar control_mean = `r(mean)'	
+				estadd local level = "`l'"
+				estadd local SE = "robust"
+				estadd local MODEL = "IV"
+				}
+			
 			
 			* IV - arm assignment --> actual treatment (two arms)
 			if "`l'" == "Village" {
@@ -323,7 +358,7 @@ use "$dir/data/nodrug_paper.dta",clear
 			}
 	}
 	
-	esttab using "$dir/output/nodrug_diagnosis_treatment.csv", b(%9.3fc) se(%9.3fc) ///
+	esttab using "$dir/output/economyofscope_results.csv", b(%9.3fc) se(%9.3fc) ///
 		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) drop(*.groupcode *.countycode) ///
 		scalar(pval_bt_treatarm control_mean level SE MODEL) label replace nobase nogap ///
 		title("Effects on drug prescriptions") ///
@@ -385,7 +420,7 @@ use "$dir/data/nodrug_paper.dta",clear
 			
 			* OLS - cluster at THC level for THC interactions
 			if "`l'" == "Township" {
-				eststo: reg `y' i.arm $cvar $cvar_fe if level == "`l'", vce(cluster thc_id)
+				eststo: reg `y' i.arm $cvar $cvar_fe if level == "`l'", vce(cluster towncode)
 				test 2.arm = 3.arm 
 				estadd scalar pval_bt_treatarm = `r(p)'
 				sum `y' if arm == 1 & e(sample) == 1 /* mean of the control arm */
@@ -396,7 +431,7 @@ use "$dir/data/nodrug_paper.dta",clear
 				}
 			
 			* IV - arm assignment --> actual treatment (three arms)
-			if "`l'" == "Township" {
+			if "`l'" == "Migrant" | "`l'" == "Township" {
 				eststo: ivregress gmm `y' (actual_b actual_a = nodrug_b nodrug_a) $cvar $cvar_fe if level == "`l'", robust
 				test actual_b = actual_a
 				estadd scalar pval_bt_treatarm = `r(p)'
@@ -422,12 +457,24 @@ use "$dir/data/nodrug_paper.dta",clear
 			}
 	}
 	
-	esttab using "$dir/output/nodrug_diagnosis_treatment.csv", b(%9.3fc) se(%9.3fc) ///
+	esttab using "$dir/output/economyofscope_results.csv", b(%9.3fc) se(%9.3fc) ///
 		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) drop(*.groupcode *.countycode) ///
-		scalar(pval_bt_treatarm control_mean level MODEL) label append nobase nogap ///
+		scalar(pval_bt_treatarm control_mean level SE MODEL) label append nobase nogap ///
 		title("Effects on process quality") ///
 		addnote("Included county and SP group fixed effects.")
 	
+
+		
+	* checklist completion rate by arm for THC
+		* average arqe by arm for THC
+		mean arqe if level == "Township", over(arm)
+		* average arqe by actual arm for THC
+		mean arqe if level == "Township" & nodrug == 1, over(arm_actual) 
+		
+	* IRT score by arm
+		mean irtscore, over(arm)
+		mean irtscore, over(arm_actual)
+
 
 **************************
 * Table 5. Effects on diagnosis outcomes (Township, Village, Migrant Clinics)
@@ -477,7 +524,7 @@ foreach y of global diagnosis {
 			
 			* OLS - cluster at THC level for THC interactions
 			if "`l'" == "Township" {
-				eststo: reg `y' i.arm $cvar $cvar_fe if level == "`l'", vce(cluster thc_id)
+				eststo: reg `y' i.arm $cvar $cvar_fe if level == "`l'", vce(cluster towncode)
 				test 2.arm = 3.arm 
 				estadd scalar pval_bt_treatarm = `r(p)'
 				sum `y' if arm == 1 & e(sample) == 1 /* mean of the control arm */
@@ -488,7 +535,7 @@ foreach y of global diagnosis {
 				}
 			
 			* IV - arm assignment --> actual treatment (three arms)
-			if "`l'" == "Township" {
+			if "`l'" == "Migrant" | "`l'" == "Township" {
 				eststo: ivregress gmm `y' (actual_b actual_a = nodrug_b nodrug_a) $cvar $cvar_fe if level == "`l'", robust
 				test actual_b = actual_a
 				estadd scalar pval_bt_treatarm = `r(p)'
@@ -514,9 +561,9 @@ foreach y of global diagnosis {
 			}
 	}
 	
-	esttab using "$dir/output/nodrug_diagnosis_treatment.csv", b(%9.3fc) se(%9.3fc) ///
+	esttab using "$dir/output/economyofscope_results.csv", b(%9.3fc) se(%9.3fc) ///
 		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) drop(*.groupcode *.countycode) ///
-		scalar(pval_bt_treatarm control_mean level MODEL) label append nobase nogap ///
+		scalar(pval_bt_treatarm control_mean level SE MODEL) label append nobase nogap ///
 		title("Effects on diagnosis outcomes") ///
 		addnote("Included county and SP group fixed effects.")
 
@@ -582,7 +629,7 @@ foreach y of global treatment {
 			
 			* OLS - cluster at THC level for THC interactions
 			if "`l'" == "Township" {
-				eststo: reg `y' i.arm $cvar $cvar_fe if level == "`l'", vce(cluster thc_id)
+				eststo: reg `y' i.arm $cvar $cvar_fe if level == "`l'", vce(cluster towncode)
 				test 2.arm = 3.arm 
 				estadd scalar pval_bt_treatarm = `r(p)'
 				sum `y' if arm == 1 & e(sample) == 1 /* mean of the control arm */
@@ -592,8 +639,21 @@ foreach y of global treatment {
 				estadd local MODEL = "OLS"
 				}
 			
-			* IV - arm assignment --> actual treatment (three arms)
+			* IV - arm assignment --> actual treatment (three arms) - THC
 			if "`l'" == "Township" {
+				eststo: ivregress gmm `y' (actual_b actual_a = nodrug_b nodrug_a) $cvar $cvar_fe if level == "`l'", robust
+				test actual_b = actual_a
+				estadd scalar pval_bt_treatarm = `r(p)'
+				
+				sum `y' if arm == 1 & e(sample) == 1 /* mean of the control arm */
+				estadd scalar control_mean = `r(mean)'	
+				estadd local level = "`l'"
+				estadd local SE = "robust"
+				estadd local MODEL = "IV"
+				}
+				
+			* IV - arm assignment --> actual treatment (three arms) - Migrant (corrdrug == 0 for all)
+			if "`l'" == "Migrant" & `y' != corrdrug {
 				eststo: ivregress gmm `y' (actual_b actual_a = nodrug_b nodrug_a) $cvar $cvar_fe if level == "`l'", robust
 				test actual_b = actual_a
 				estadd scalar pval_bt_treatarm = `r(p)'
@@ -619,9 +679,9 @@ foreach y of global treatment {
 			}
 	}
 	
-	esttab using "$dir/output/nodrug_diagnosis_treatment.csv", b(%9.3fc) se(%9.3fc) ///
+	esttab using "$dir/output/economyofscope_results.csv", b(%9.3fc) se(%9.3fc) ///
 		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) drop(*.groupcode *.countycode) ///
-		scalar(pval_bt_treatarm control_mean level MODEL) label append nobase nogap ///
+		scalar(pval_bt_treatarm control_mean level SE MODEL) label append nobase nogap ///
 		title("Effects on treatment outcomes") ///
 		addnote("Included county and SP group fixed effects." ///
 			"Partially correct treatment includes prescribing unnecessary drugs.")
@@ -694,9 +754,9 @@ foreach y of varlist $prescription $process $diagnosis {
 			}
 	}
 	
-	esttab using "$dir/output/nodrug_diagnosis_treatment.csv", b(%9.3fc) se(%9.3fc) ///
+	esttab using "$dir/output/economyofscope_results.csv", b(%9.3fc) se(%9.3fc) ///
 		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) drop(*.groupcode *.countycode) ///
-		scalar(pval_bt_treatarm control_mean disease MODEL level) label append nobase nogap ///
+		scalar(pval_bt_treatarm control_mean disease SE MODEL level) label append nobase nogap ///
 		title("Effects by disease") ///
 		addnote("Included level, county and SP group fixed effects." ///
 			"Partially correct treatment includes prescribing unnecessary drugs.")

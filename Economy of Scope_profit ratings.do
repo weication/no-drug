@@ -126,17 +126,36 @@ polychoricpca  *_imputed, score(profit_index) nscore(1)
 	label values high_profit lhigh_profit
 	tab high_profit
 	
-* create datafile of drug profit ratings
-	rename 药品名称 med_name
+* rename drug names to be consistent with the drugdataset names
+
+	// export excel 药品名称 using "$dir/data/profit_rating_drugs.xlsx",firstrow(variables) 
+	*!!! 药品名称 are manually compared and matched to med_name in the druglist 
+	
+	/*
+	preserve
+	import excel "$dir/data/profit_rating_drugs.xlsx", sheet("Sheet1") firstrow clear
+	save "$dir/data/profit_rating_drugs.dta",replace
+	*/
+	
+	* match 药品名称 with "med_name" used in the drug list
+	merge m:1 药品名称 using "$dir/data/profit_rating_drugs.dta", keepus(med_name)
+
+	
+	* drop drugs with the same med_name
+	
+	duplicates tag med_name, generate(dup_med)
+	tab 药品名称 if dup_med == 1
+	drop if 药品名称 == "5%葡萄糖(100ml)" //duplicate for 5%葡萄糖注射液
+	drop if 药品名称 == "青霉素胶囊" //duplicate for 青霉素
+	
 	save "$dir/data/high_profit_drugs.dta", replace
-		use "$dir/data/high_profit_drugs.dta", clear
 
 ******** 4. merge ratings with the drug dataset
 	
 	use "$dir/raw/drugdataset_final_SP2015.dta",clear
-	merge 1:1 med_name using "$dir/data/high_profit_drugs.dta", keepus(high_profit)
-	
-	***** need to clean the drug names ******
+	merge 1:m med_name using "$dir/data/high_profit_drugs.dta", keepus(high_profit)
+	drop if _merge == 2
+	save "$dir/data/drugdataset_final_SP2015.dta",replace
 
 
 log off
