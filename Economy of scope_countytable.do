@@ -27,10 +27,10 @@ log using "$dir/log/$study `c(current_date)'.log",replace
 use "$dir/data/nodrug_paper.dta",clear
 
 
-* drop vignette type 2/Q10 observations
-	label list type
-	drop if type == 2
 	
+* keep only SP observations
+	label list type
+	keep if type == 0
 
 * recode string variables
 	encode disease, gen(diseasecode)
@@ -107,7 +107,7 @@ foreach y of global y {
 		putexcel C`n' = `r(rho)'
 	
 		loneway `y' countycode if disease == "D" & level == "Township"
-		putexcel D`n' = `r(rho)'
+		putexcel D`n' = `r(rho)' 
 	
 		loneway `y' countycode if disease == "A" & level == "Village"
 		putexcel E`n' = `r(rho)'
@@ -123,25 +123,25 @@ foreach y of global y {
 
 
 ********************
-* number of providers per county
+* number of interactions per county
 ********************
 
-	putexcel B12 = "# of providers"
+	putexcel B12 = "# of interactions"
 		
-	* unique number of doctors
-		unique doctorid if disease == "A" & level == "Township"
+	* unique number of interactions
+		unique ID if disease == "A" & level == "Township"
 		putexcel C12 = `r(unique)'
 		
-		unique doctorid if disease == "D" & level == "Township"
+		unique ID if disease == "D" & level == "Township"
 		putexcel D12 = `r(unique)'
 		
-		unique doctorid if disease == "A" & level == "Village"
+		unique ID if disease == "A" & level == "Village"
 		putexcel E12 = `r(unique)'
 		
-		unique doctorid if disease == "D" & level == "Village"
+		unique ID if disease == "D" & level == "Village"
 		putexcel F12 = `r(unique)'
 		
-		unique doctorid if disease == "T" & level == "Village"
+		unique ID if disease == "T" & level == "Village"
 		putexcel G12 = `r(unique)'
 		
 		
@@ -155,14 +155,18 @@ foreach y of global y {
 		sum `y' if disease == "A" & level == "Township"
 		putexcel C`n' = `r(sd)'
 		
-		sum `y' if disease == "D" & level == "Township"
-		putexcel D`n' = `r(sd)'
+		if "`y'" != "are" {
+			sum `y' if disease == "D" & level == "Township"
+			putexcel D`n' = `r(sd)'
+		}
 		
 		sum `y' if disease == "A" & level == "Village"
 		putexcel E`n' = `r(sd)'
 		
-		sum `y' if disease == "D" & level == "Village"
-		putexcel F`n' = `r(sd)'
+		if "`y'" != "are" {
+			sum `y' if disease == "D" & level == "Village"
+			putexcel F`n' = `r(sd)'
+		}
 		
 		sum `y' if disease == "T" & level == "Village"
 		putexcel G`n' = `r(sd)'
