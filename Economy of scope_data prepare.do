@@ -142,12 +142,12 @@ Step 3: Main outcome variables
 	
 	list ID corrdrug referral if diagtime_min ==. & type == 0
 	
-	des arq arqe 
+	des arq arqe are
 	label list type
 	
 
 	*process vars : diagtime_min diagtime arq arqe irtscore
-	global process "diagtime_min diagtime arq arqe irtscore"
+	global process "diagtime_min diagtime arq arqe are irtscore"
 
 	foreach x of global process {
 			di "missing values for SP or vignette interactions: `x'"
@@ -289,7 +289,7 @@ Step 5: Clean data for nodrug paper
 	des $process $diagnosis $treatment $control1 $control2 $control3 $arm $chi_meds
 	
 	keep $process $diagnosis $treatment $control1 $control2 $control3 $arm ///
-		type patientload drugfee totfee $chi_meds any_high_profit num_high_profit
+		type patientload drugfee totfee $chi_meds any_high_profit num_high_profit 
 
 
 	compress
