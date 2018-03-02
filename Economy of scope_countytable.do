@@ -123,26 +123,36 @@ foreach y of global y {
 
 
 ********************
-* number of interactions 
+* number of interactions per county
 ********************
 
-	putexcel B12 = "# of interactions"
+	putexcel B12 = "# of interactions per county"
+		
+		sort level disease countycode
+		by level disease countycode: gen num = _N
+		label var num "number of interactions per county by disease and level"
+		
+		preserve
+		collapse (mean) num, by(level disease countycode)
+
 		
 	* unique number of interactions
-		unique ID if disease == "A" & level == "Township"
-		putexcel C12 = `r(unique)'
+		sum num if disease == "A" & level == "Township"
+		putexcel C12 = `r(mean)'
 		
-		unique ID if disease == "D" & level == "Township"
-		putexcel D12 = `r(unique)'
+		sum num if disease == "D" & level == "Township"
+		putexcel D12 = `r(mean)'
 		
-		unique ID if disease == "A" & level == "Village"
-		putexcel E12 = `r(unique)'
+		sum num if disease == "A" & level == "Village"
+		putexcel E12 = `r(mean)'
 		
-		unique ID if disease == "D" & level == "Village"
-		putexcel F12 = `r(unique)'
+		sum num if disease == "D" & level == "Village"
+		putexcel F12 = `r(mean)'
 		
-		unique ID if disease == "T" & level == "Village"
-		putexcel G12 = `r(unique)'
+		sum num if disease == "T" & level == "Village"
+		putexcel G12 = `r(mean)'
+		
+		restore
 		
 		
 ***************
@@ -182,21 +192,8 @@ foreach y of global y {
 		putexcel B19 = "Correct treatment"
 
 * number format
-	putexcel C5:G10, nformat(number_d2) overwritefmt
-	putexcel C15:G19, nformat(number_d2) overwritefmt
+	putexcel C5:G19, nformat(number_d2) overwritefmt
 		
-		
-******* average number of interactions per county *****
-
-	encode ID,gen(IDn)
-	table countycode, c(n IDn)
-	
-	preserve
-	collapse (count) IDn, by(countycode)
-	sum IDn
-	dis "average number of interactions per county: " r(mean)
-
-	restore
 
 	
 
