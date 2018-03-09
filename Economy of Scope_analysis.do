@@ -246,8 +246,8 @@ use "$dir/data/nodrug_paper.dta",clear
 	Chinese modern ??
 	Chinese herbal ??
 	"High profit" Meds
-		any_high_profit ??
-		num_high_profit ??
+		any_high_profit
+		num_high_profit
 	*/
 	
 	* check the distribution of "number of drugs" - number of zeros
@@ -263,7 +263,7 @@ use "$dir/data/nodrug_paper.dta",clear
 	* drugfee: missing ~35% --> use total SP visit fee as outcome 
 	
 	
-	global prescription = "numofdrug totfee numedl numnonedl"
+	global prescription = "numofdrug totfee numedl numnonedl any_high_profit num_high_profit"
 	
 * define covariates
 	global cvar_fe = "i.diseasecode i.group i.countycode"
@@ -316,9 +316,10 @@ use "$dir/data/nodrug_paper.dta",clear
 				estadd local SE = "clustered"
 				estadd local MODEL = "OLS"
 				}
+				
 			
 			* IV - arm assignment --> actual treatment (three arms) - THC
-			if "`l'" == "Township" {
+			if "`l'" == "Township" & `y' != any_high_profit & `y' != num_high_profit {
 				eststo: ivregress gmm `y' (actual_b actual_a = nodrug_b nodrug_a) $cvar $cvar_fe if level == "`l'", robust
 				test actual_b = actual_a
 				estadd scalar pval_bt_treatarm = `r(p)'
@@ -331,7 +332,7 @@ use "$dir/data/nodrug_paper.dta",clear
 				}
 				
 			* IV - arm assignment --> actual treatment (three arms) - Migrant (too many missing for totfee)
-			if "`l'" == "Migrant" & `y' != totfee {
+			if "`l'" == "Migrant" & `y' != totfee & `y' != any_high_profit & `y' != num_high_profit {
 				eststo: ivregress gmm `y' (actual_b actual_a = nodrug_b nodrug_a) $cvar $cvar_fe if level == "`l'", robust
 				test actual_b = actual_a
 				estadd scalar pval_bt_treatarm = `r(p)'
@@ -345,7 +346,7 @@ use "$dir/data/nodrug_paper.dta",clear
 			
 			
 			* IV - arm assignment --> actual treatment (two arms)
-			if "`l'" == "Village" {
+			if "`l'" == "Village" & `y' != any_high_profit & `y' != num_high_profit {
 				eststo: ivregress gmm `y' (actual_b = nodrug_b) $cvar $cvar_fe if level == "`l'", robust
 				
 				sum `y' if arm == 1 & e(sample) == 1 /* mean of the control arm */
@@ -700,13 +701,13 @@ foreach y of global treatment {
 
 	global cvar_fe2 = "i.groupcode i.levelcode i.countycode"
 	
-* not including treatment!!!!!!!
+* excluded treatment!!!
 	
-foreach y of varlist $prescription $process $diagnosis {
+foreach y of varlist numofdrug totfee numedl numnonedl $process $diagnosis {
 	foreach d of local disease {
 		* three arms, including only MC & THC
 				* OLS - parsimonious
-				eststo: reg `y' i.arm $cvar_fe2 if disease == "`d'" & level != "Village", vce(robust) 
+				eststo: reg `y' i.arm $cvar_fe2 if disease == "`d'", vce(robust) 
 				test 2.arm = 3.arm 
 				estadd scalar pval_bt_treatarm = `r(p)'
 
@@ -718,7 +719,7 @@ foreach y of varlist $prescription $process $diagnosis {
 				estadd local level = "MC & THC"
 			
 				* OLS - full
-				eststo: reg `y' i.arm $cvar $cvar_fe2 if disease == "`d'" & level != "Village", vce(robust) 
+				eststo: reg `y' i.arm $cvar $cvar_fe2 if disease == "`d'", vce(robust) 
 				test 2.arm = 3.arm 
 				estadd scalar pval_bt_treatarm = `r(p)'
 			

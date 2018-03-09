@@ -155,6 +155,11 @@ polychoricpca  *_imputed, score(profit_index) nscore(1)
 	use "$dir/raw/drugdataset_final_SP2015.dta",clear
 	merge 1:m med_name using "$dir/data/high_profit_drugs.dta", keepus(high_profit)
 	drop if _merge == 2
+	
+	* drop the duplicate "利巴韦林"
+	duplicates list med_code
+	duplicates drop
+
 	save "$dir/data/drugdataset_final_SP2015.dta",replace
 
 
