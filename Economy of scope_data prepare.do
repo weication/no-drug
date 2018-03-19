@@ -305,6 +305,8 @@ Step 5: Clean data for nodrug paper
 	
 	keep $process $diagnosis $treatment $control1 $control2 $control3 $arm ///
 		type patientload drugfee totfee $chi_meds any_high_profit num_high_profit 
+					
+					// Cannot drop certain ID vars: type vignette etc...
 
 
 	compress
