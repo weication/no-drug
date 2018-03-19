@@ -14,18 +14,24 @@ set logtype t
 
 * Created by:		Wei Chang
 * Date created: 	2Feb2018
+*Last Modified:		18 Mar 2018   Sean
+
 ***********************
 
+*Preliminaries
 
-global dir = "/Users/Wei/Google Drive/PhD/Work/RA for Sean/Economy of scope"
+*global dir = "/Users/Wei/Google Drive/PhD/Work/RA for Sean/Economy of scope" // Wei
+global dir = "/Users/sean/Dropbox (Personal)/Research/Papers/Returns to Scope" // Sean
+
+
 cd "$dir"
 
 global study = "EconomyOfScope"
-log using "$dir/log/$study `c(current_date)'.log",replace
+*log using "$dir/log/$study `c(current_date)'.log",replace
 
 set maxvar 20000
-use "$dir/raw/SP_total_dataset_1oct2017.dta",clear
-
+*use "$dir/raw/SP_total_dataset_1oct2017.dta",clear
+use "$dir/data/raw/SP_total_dataset_1oct2017.dta",clear
 
 /*-------
 Step 1: Get sample readay
@@ -35,7 +41,7 @@ Step 1: Get sample readay
 
 	drop if CH==1
 	
-	drop if disease=="T" & THC==1
+*	drop if disease=="T" & THC==1
 	
 	drop if ruleofthumb == 1
 	
@@ -44,7 +50,7 @@ Step 1: Get sample readay
 	drop if ID == "SPV_A1106101"  // VC 11061 has a TB visit. To consistent with TB paper, drop this
 	
 	bys level: ta nodrug_b if vignette == 0, m
-	bys level: ta nodrug_a if vignette == 0, m
+	*bys level: ta nodrug_a if vignette == 0, m
 	
 	bys level: ta nodrug_b nodrug_a if vignette == 1,m
 	replace nodrug_b = . if vignette == 1 & migrant == 1 & nodrug_b == 0
@@ -81,8 +87,11 @@ Step 1: Get sample readay
 */	
 	
 /*-------
-Step 2: Vignette type 2 - Q10 section
+Step 2: Vignette type 2 - Q10 section 
 --------*/	
+								// Is this the new drug data??
+								// Why only vignette here?
+								// Wha is Type 2 v Type 1?? Are Type II the treatment only vignettes?
 
 	preserve
 	
@@ -148,12 +157,14 @@ Step 3: Main outcome variables
 
 	*process vars : diagtime_min diagtime arq arqe irtscore
 	global process "diagtime_min diagtime arq arqe are irtscore"
+						// NOTE all we care about is arqe here
 
 	foreach x of global process {
 			di "missing values for SP or vignette interactions: `x'"
 			count if `x' == . & type != 2
 		}
-
+					// CODING HINT: You may miss a lot of missing s if you count this way, try:
+					count if missing(are)==1 & type != 2
 	
 	*diagnosis vars : gavediag corrdiag wrongdiag 
 	global diagnosis "gavediag corrdiag wrongdiag pcorrdiag"
@@ -162,6 +173,7 @@ Step 3: Main outcome variables
 			di "missing values for SP or vignette interactions: `x'"
 			count if `x' == . & type != 2
 		}
+		
 	
 	des corrdrug drugpres
 	tab corrdrug drugpres
@@ -189,6 +201,7 @@ Step 3: Main outcome variables
 	ta disease type if corrdrug == ., m
 	ta disease type if pcorrdrug == ., m
 	* for TB, do not have "corrdrug" & "pcorrdrug" vars
+		// SS: There is no correct drug for TB....drugs should not be prescribed
 		
 		
 	*treatment vars including vignette type 2: 
@@ -212,6 +225,7 @@ Step 3: Main outcome variables
 	
 	* high-profit drugs
 		* merge profit rating for each drug (med_code1 - med_code 11)
+										// PLEASE PUT THIS DATA IN DROPBOX FOLDER
 		foreach n of numlist 1/11 {
 			rename med_code`n' med_code
 			merge m:1 med_code using "$dir/data/drugdataset_final_SP2015.dta", keepus(high_profit)
@@ -276,6 +290,7 @@ Step 4: Main control vars
 			count if `x' == .
 		}
 		* only SP has "patientload", and there are some missing for provider characteristics	
+			//ADD PATIENTLOAD TO VIGNETTE DATA...IT IS CLINICL LEVEL VARIABLE
 	
 	
 /*-------
