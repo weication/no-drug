@@ -14,23 +14,26 @@ set logtype t
 
 * Created by:		Wei Chang
 * Date created: 	2Feb2018
-*Last Modified:		18 Mar 2018   Sean
+*Last Modified:		21 Apr 2018   Sean
 ***********************
 
 
-global dir = "/Users/Wei/Google Drive/PhD/Work/RA for Sean/Economy of scope"
+*Preliminaries
+
+*global dir = "/Users/Wei/Google Drive/PhD/Work/RA for Sean/Economy of scope" // Wei
+global dir = "/Users/sean/Dropbox (Personal)/Research/Papers/Returns to Scope" // Sean
+
+
 cd "$dir"
 
-global study = "EconomyOfScope"
-log using "$dir/log/$study `c(current_date)'.log",replace
 
-
+*Bring in Data
 use "$dir/data/nodrug_paper.dta",clear
 
 
 * drop vignette type 2/Q10 observations
-	label list type
-	drop if type == 2
+*	label list type
+*	drop if type == 2
 	
 
 * recode string variables
@@ -47,7 +50,7 @@ use "$dir/data/nodrug_paper.dta",clear
 * rename variables
 	des year
 	rename year experience
-	label var experience experience
+	label var experience "experience"
 	
 	label var patientload "patient load"
 	
@@ -55,20 +58,21 @@ use "$dir/data/nodrug_paper.dta",clear
 	
 	label var numofdrug "Number of medicines prescribed"
 	
-* create variable for Chinese modern/herbal drugs
+/* create variable for Chinese modern/herbal drugs
+	// Need to add in other diseases
 	gen chi_med_h = .
-	replace chi_med_h = 0 if thc_t_v_Q9_9 == 0 | vc_t_v_Q9_9==0 | ch_t_v_Q9_9==0
-	replace chi_med_h = 1 if thc_t_v_Q9_9 == 1 | vc_t_v_Q9_9==1 | ch_t_v_Q9_9==1
+	replace chi_med_h = 0 if thc_t_v_Q9_9 == 0 | vc_t_v_Q9_9==0  
+	replace chi_med_h = 1 if thc_t_v_Q9_9 == 1 | vc_t_v_Q9_9==1  
 	label var chi_med_h "Chinese herbal medicine"
 	label define yesno 0 no 1 yes
 	label values chi_med_h yesno
 	
 	gen chi_med_m = .
-	replace chi_med_m = 0 if thc_t_v_Q9_10 == 0 | vc_t_v_Q9_10==0 | ch_t_v_Q9_10==0
-	replace chi_med_m = 1 if thc_t_v_Q9_10 == 1 | vc_t_v_Q9_10==1 | ch_t_v_Q9_10==1
+	replace chi_med_m = 0 if thc_t_v_Q9_10 == 0 | vc_t_v_Q9_10==0 
+	replace chi_med_m = 1 if thc_t_v_Q9_10 == 1 | vc_t_v_Q9_10==1 
 	label var chi_med_m "Chinese modern medicine"
 	label values chi_med_h yesno 
-
+*/
 
 * missing summary - SP visits
 	levelsof(level),local(level)
@@ -78,12 +82,32 @@ use "$dir/data/nodrug_paper.dta",clear
 		}
  	
 * missing for chinese herbal and chinese modern 
-	tab chi_med_h level if type ==0, m nof col
-	tab chi_med_m level if type ==0, m nof col
+*	tab chi_med_h level if type ==0, m nof col
+*	tab chi_med_m level if type ==0, m nof col
 	
 * missing for high profit ratings
 	tab any_high_profit level if type == 0, m col
 	tab num_high_profit level if type == 0, m nof col
+	
+	tab any_low_profit level if type == 0, m col
+	tab num_low_profit level if type == 0, m nof col
+	
+
+*prepvars
+* match IRT score from vignette
+	preserve
+	keep if type == 1
+	isid doctorid disease
+	keep doctorid disease irtscore
+	rename irtscore irtscore_v
+	label var irtscore_v "IRT score from vigenette"
+	save "$dir/data/irtscore_vignette1.dta", replace
+	restore
+	
+	merge m:1 doctorid disease using "$dir/data/irtscore_vignette1.dta"
+	* dataset in memory includes both SP and vignette (type 1) interactions
+	drop _merge
+	
 
 	
 *************************
@@ -96,7 +120,7 @@ use "$dir/data/nodrug_paper.dta",clear
 	replace arm = 1 if nodrug_a == 0 & nodrug_b == 0
 	replace arm = 2 if nodrug_a == 0 & nodrug_b == 1
 	replace arm = 3 if nodrug_a == 1 & nodrug_b == 0
-	label define larm 1 "no_story" 2 "story_beginning" 3 "story_end" 
+	label define larm 1 "no_treat" 2 "treat_beginning" 3 "treat_end" 
 	label values arm larm
 	
 
@@ -104,7 +128,7 @@ use "$dir/data/nodrug_paper.dta",clear
 	
 	* logout, save($dir/output/distribution) excel replace: table diseasecode arm, by(levelcode) row center
 	
-	
+/*
 * treatment implementation fidelity check - % of treatment arm not treated
 	tab arm nodrug, m row
 	
@@ -127,14 +151,8 @@ use "$dir/data/nodrug_paper.dta",clear
 	label var arm_actual "arm as treated" 
 	label values arm_actual larm
 	note arm_actual: arm_actual = 1 if assigned to treatment but not actually treated. 
-	
-	gen actual_b = nodrug_b
-	replace actual_b = 0 if nodrug_b == 1 & nodrug ==0
-	label var actual_b "actual story_beginning"
-	
-	gen actual_a = nodrug_a
-	replace actual_a = 0 if nodrug_a == 1 & nodrug ==0
-	label var actual_a "actual story_end"
+*/
+
 	
 
 	
@@ -174,36 +192,82 @@ use "$dir/data/nodrug_paper.dta",clear
 		}
 		
 
-***********************
+/***********************
 * Figure 1: Cumulative densities for IRT by arm
 ***********************
 
-	distplot irtscore, over (arm) ///
+
+*THCs
+distplot irtscore if THC==1 & diseasecode!=3 & thc_nd_a==1 & type==0, over (arm) ///
 		title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
-		legend(label(1 "no story") label(2 "story_beginning") label(3 "story_end") ///
+		legend(label(1 "control") label(2 "treat_end")  ///
+			rows(1) size(small)) lcolor(gray black black) ///
+			lpattern(shortdash solic dash) 
+			
+distplot irtscore if THC==1 & diseasecode!=3 & thc_nd_b==1 & type==0, over (arm) ///
+		title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+		legend(label(1 "control") label(2 "treat_beginning") ///
 			rows(1) size(small)) lcolor(gray black black) ///
 			lpattern(shortdash solic dash)
+			
+g irt_norm = .
 	
-	graph export "$dir/output/irt_score_by_arm.png", replace
+	su irtscore if arm==1 & THC==1 & diseasecode!=3 & type==0, det
+	replace irt_norm = (irtscore - `r(mean)')/`r(sd)' if THC==1 & diseasecode!=3 & type==0
 	
-**************************
+	su irtscore if arm==1 & MVC==1 & type==0, det
+	replace irt_norm = (irtscore - `r(mean)')/`r(sd)' if  MVC==1 & type==0
+	
+	su irtscore if arm==1 & VC==1 & type==0, det
+	replace irt_norm = (irtscore - `r(mean)')/`r(sd)' if  VC==1 & type==0
+
+distplot irt_norm if THC==1 & diseasecode!=3 & thc_nd_a==1 & type==0, over (arm) ///
+		title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+		legend(label(1 "control") label(2 "treat_beginning") label(3 "treat_end") ///
+			rows(1) size(small)) lcolor(gray black black) ///
+			lpattern(shortdash solic dash) 
+			
+distplot irt_norm if THC==1 & diseasecode!=3 & thc_nd_b==1 & type==0, over (arm) ///
+		title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+		legend(label(1 "control") label(2 "treat_beginning") label(3 "treat_end") ///
+			rows(1) size(small)) lcolor(gray black black) ///
+			lpattern(shortdash solic dash)
+				
+			
+*MVCs
+distplot irtscore if MVC==1 & type==0, over (arm) ///
+		title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+		legend(label(1 "control") label(2 "treat_beginning") label(3 "treat_end") ///
+			rows(1) size(small)) lcolor(gray black black) ///
+			lpattern(shortdash solic dash) 
+			
+distplot irt_norm if MVC==1 & type==0, over (arm) ///
+		title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+		legend(label(1 "control") label(2 "treat_beginning") label(3 "treat_end") ///
+			rows(1) size(small)) lcolor(gray black black) ///
+			lpattern(shortdash solic dash) 
+			
+*VCs
+
+distplot irtscore if VC==1 & type==0, over (arm) ///
+		title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+		legend(label(1 "control") label(2 "treat_beginning") label(3 "treat_end") ///
+			rows(1) size(small)) lcolor(gray black black) ///
+			lpattern(shortdash solic dash) 
+			
+distplot irt_norm if VC==1 & type==0, over (arm) ///
+		title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+		legend(label(1 "control") label(2 "treat_beginning") label(3 "treat_end") ///
+			rows(1) size(small)) lcolor(gray black black) ///
+			lpattern(shortdash solic dash) 
+
+			
+
+**************************/
 * Table 3. Effects on drug prescriptions
 **************************
 
-* match IRT score from vignette
-	preserve
-	keep if type == 1
-	isid doctorid disease
-	keep doctorid disease irtscore
-	rename irtscore irtscore_v
-	label var irtscore_v "IRT score from vigenette"
-	save "$dir/data/irtscore_vignette1.dta", replace
-	restore
-	
-	merge m:1 doctorid disease using "$dir/data/irtscore_vignette1.dta"
-	* dataset in memory includes both SP and vignette (type 1) interactions
-	drop _merge
-	
+
 	
 /* generate dummies for higher than median values for covars.: 
 	high/low IRT knowledge 
@@ -262,13 +326,299 @@ use "$dir/data/nodrug_paper.dta",clear
 	sum drugfee totfee
 	misstable sum drugfee totfee if arm != .
 	* drugfee: missing ~35% --> use total SP visit fee as outcome 
+
+	replace num_high_profit = 0 if num_high_profit==. & type==0
+	replace any_high_profit = 0 if any_high_profit==. & type==0
+	replace num_low_profit = 0 if num_low_profit==. & type==0
+	replace any_low_profit = 0 if any_low_profit==. & type==0
+
+	
+/*---------------THC------------------*/
+global prescription = "drugpres numofdrug totfee numedl numnonedl any_high_profit num_high_profit any_low_profit num_low_profit antibiotic chi_med"
+global spcase = "i.diseasecode i.groupcode"	
+
+eststo clear
+foreach y of global prescription {
+		eststo, title(TFE - "`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(towncode)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+					
+		eststo, title(CFE+SPFE - "`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode i.groupcode  if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(countycode)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		}
+
+esttab using "$dir/output/THC_Drug.csv", b(%9.3fc) se(%9.3fc) ///
+		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+		scalar(pval_ab contmean) label replace nobase nogap mti ///
+		title("Effects on drug prescriptions") ///
+		addnote("Regressions include township and case fixed effects.")
+		
+
+		
+/* TOT	
+		eststo, title(TOT - "`y'"): ivregress gmm `y' (nodrug_b nodrug_a = actual_b actual_a) i.diseasecode  i.towncode if THC==1 & diseasecode!=3 & type==0, vce(robust)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+*/
+
+*tobit numofdrug nodrug_b nodrug_a  $spcase if THC==1 & diseasecode!=3 & type==0, vce(robust) ll(0)
+
+		
+/*	
+	eststo: areg `y' nodrug_b  		   $spcase if THC==1 & diseasecode!=3 & thc_nd_b==1 & type==0, vce(robust) absorb(towncode)
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+				estadd scalar conmean = `r(mean)'
+	eststo: areg `y' 		 nodrug_a  $spcase if THC==1 & diseasecode!=3 & thc_nd_a==1 & type==0, vce(robust) absorb(towncode)
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+				estadd scalar conmean = `r(mean)'
+		eststo: ivregress gmm `y' (nodrug_b  = actual_b )   $spcase if THC==1 & diseasecode!=3 & thc_nd_b==1 & type==0, vce(robust) 
+					su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		eststo: ivregress gmm `y' ( nodrug_a =  actual_a)  $spcase if THC==1 & diseasecode!=3 & thc_nd_a==1 & type==0, vce(robust) 
+					su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)
+*/
+
+*Conditional on prescription
+*OLS
+eststo clear
+foreach y of varlist $prescription{ // numofdrug totfee numedl numnonedl any_high_profit num_high_profit antibiotic chi_med{
+		eststo: areg `y' nodrug_b nodrug_a   i.diseasecode  if THC==1 & diseasecode!=3 & type==0 & drugpres==1, vce(robust) absorb(towncode)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+					
+		eststo: areg `y' nodrug_b nodrug_a   i.diseasecode i.groupcode  if THC==1 & diseasecode!=3 & type==0 & drugpres==1, vce(robust) absorb(countycode)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		}
+		
+		foreach y of varlist any_high_profit num_high_profit any_low_profit num_low_profit{
+		
+			eststo: areg `y' nodrug_b nodrug_a   i.diseasecode i.groupcode  if THC==1 & diseasecode!=3 & type==0 & (any_high_profit==1 | any_low_profit==1), vce(robust) absorb(countycode)
+							test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+							su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+			}
+
+esttab using "$dir/output/THC_Drug.csv", b(%9.3fc) se(%9.3fc) ///
+		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+		scalar(pval_ab contmean) label append nobase nogap ///
+		title("Effects on drug prescriptions") ///
+		addnote("Regressions include township and case fixed effects.")
+
+
+/*---------------MVC------------------*/
+
+eststo clear
+foreach y of global prescription {
+		eststo, title(ITT NOFE - "`y'"): reg `y' nodrug_b nodrug_a  i.diseasecode if MVC==1 & diseasecode!=3 & type==0, vce(robust)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		eststo, title(ITT DOCFE - "`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode if MVC==1 & diseasecode!=3 & type==0, vce(robust) absorb(doctorid)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		}
+
+esttab using "$dir/output/MVC_Drug.csv", b(%9.3fc) se(%9.3fc) ///
+		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+		scalar(pval_ab contmean) label replace nobase nogap mti ///
+		title("Effects on drug prescriptions") ///
+		addnote("Regressions include case fixed effects.")
+		
+eststo clear
+foreach y of global prescription {
+		eststo, title(ITT NOFE - "`y'"): reg `y' nodrug_b nodrug_a  i.diseasecode if MVC==1 & diseasecode!=3 & type==0 & drugpres==1, vce(robust)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		eststo, title(ITT DOCFE - "`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode if MVC==1 & diseasecode!=3 & type==0 & drugpres==1, vce(robust) absorb(doctorid)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		}
+
+		
+		reg any_high_profit nodrug_b nodrug_a   i.diseasecode i.groupcode  if MVC==1 & type==0 & (any_high_profit==1 | any_low_profit==1), vce(robust) 
+		reg any_high_profit nodrug_b nodrug_a   i.diseasecode i.groupcode  if MVC==1 & type==0 , vce(robust) 
+		areg any_high_profit nodrug_b nodrug_a   i.diseasecode  if MVC==1 & type==0 , vce(robust) absorb(doctorid)
+		
+		areg any_high_profit nodrug_b nodrug_a   i.diseasecode  if MVC==1 & type==0 & drugpres==1, vce(robust) absorb(doctorid)
+		areg any_high_profit nodrug_b nodrug_a   i.diseasecode  if MVC==1 & type==0  & (any_high_profit==1 | any_low_profit==1), vce(robust) absorb(doctorid)
+		
+		
+esttab using "$dir/output/MVC_Drug.csv", b(%9.3fc) se(%9.3fc) ///
+		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+		scalar(pval_ab contmean) label append nobase nogap mti ///
+		title("Effects on drug prescriptions") ///
+		addnote("Regressions include case fixed effects.")
+		
+		
+/*---------------VC------------------*/
+		
+eststo clear
+foreach y of global prescription {
+		eststo, title(ITT - "`y'"): reg `y' nodrug_b   i.diseasecode if VC==1 & diseasecode!=3 & type==0, vce(robust) 
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		eststo, title(TOT - "`y'"): ivregress gmm `y' (nodrug_b  = actual_b ) i.diseasecode if VC==1 & diseasecode!=3 & type==0, vce(robust)
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		}
+
+esttab using "$dir/output/VC_Drug.csv", b(%9.3fc) se(%9.3fc) ///
+		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b) ///
+		scalar(contmean) label replace nobase nogap mti ///
+		title("Effects on drug prescriptions") ///
+		addnote("Regressions include case fixed effects.")
+		
+		
+eststo clear
+foreach y of varlist numofdrug totfee numedl numnonedl any_high_profit num_high_profit antibiotic chi_med{
+		
+		eststo, title(ITT - "`y'"): reg `y' nodrug_b   i.diseasecode if VC==1 & diseasecode!=3 & type==0 & drugpres==1, vce(robust) 
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		eststo, title(TOT - "`y'"): ivregress gmm `y' (nodrug_b  = actual_b ) i.diseasecode if VC==1 & diseasecode!=3 & type==0 & drugpres==1, vce(robust)
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		}
+
+esttab using "$dir/output/VC_DrugCond.csv", b(%9.3fc) se(%9.3fc) ///
+		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b) ///
+		scalar(contmean) label replace nobase nogap mti ///
+		title("Effects on drug prescriptions") ///
+		addnote("Regressions include case fixed effects.")
+		
+
+**************************
+* Table 4. Effects on process quality
+**************************
+			
+		
+		
+/* PROCESS outcomes:
+	time
+	checklist completion %: 
+		average % recommended questions asked
+		average % recommended questions and examination performed
+	IRT score
+	*/
+	global process = "diagtime_min arqe irtscore"
+	
+	label var diagtime_min "diagnosis time"
+	label var arqe "checklist completion % (questions and exam)"
 	
 	
-	global prescription = "numofdrug totfee numedl numnonedl any_high_profit num_high_profit"
+/*---------------THC------------------*/
+						
+
+eststo clear
+foreach y of global process{
+		eststo, title(ITT - "`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(towncode)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		eststo, title(TOT - "`y'"): ivregress gmm `y' (nodrug_b nodrug_a = actual_b actual_a) i.diseasecode  i.towncode if THC==1 & diseasecode!=3 & type==0, vce(robust)
+				test nodrug_b = nodrug_a 
+					estadd scalar pval_ab = `r(p)'
+				su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+					estadd scalar conmean = `r(mean)'
+		}
+
+esttab using "$dir/output/THC_Proc.csv", b(%9.3fc) se(%9.3fc) ///
+		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+		scalar(pval_ab contmean) label replace nobase nogap mti ///
+		title("Effects on drug prescriptions") ///
+		addnote("Regressions include township and case fixed effects.")						
+						
+
+						
+						
+reg irtscore nodrug_b  i.diseasecode  i.towncode if THC==1 & diseasecode!=3 & type==0 & thc_nd_b==1, vce(robust)							
+reg irtscore nodrug_a  i.diseasecode  i.towncode if THC==1 & diseasecode!=3 & type==0 & thc_nd_a==1, vce(robust)							
+areg irtscore nodrug_b nodrug_a  i.diseasecode if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(towncode)		
+						
+						
+ivregress gmm irtscore ( nodrug_a = actual_a) i.diseasecode  i.towncode if THC==1 & diseasecode!=3 & type==0 & thc_nd_a==1, vce(robust)						
+						
+						eststo clear
+					foreach y of global process {
+					
+						eststo: reg `y' nodrug_b nodrug_a i.diseasecode  if THC==1 & disease!="T", robust
+							test nodrug_b = nodrug_a
+						eststo: ivregress gmm `y' (actual_b actual_a = nodrug_b nodrug_a) i.diseasecode  if THC==1 & disease!="T", robust
+							test actual_b = actual_a 
+							}
+								
 	
+	
+	
+					* Sean 20 Mar
+					
+					*Village
+					eststo clear
+					foreach y of global process {
+						
+						eststo: reg `y' nodrug_b i.diseasecode if VC==1, robust
+						eststo: ivregress gmm `y' (actual_b = nodrug_b ) i.diseasecode if VC==1, robust
+					}
+	
+					*Township
+	
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
 * define covariates
 	global cvar_fe = "i.diseasecode i.group i.countycode"
 	global cvar = "i.irtscore_v_high i.income_high i.experience_high i.patientload_high i.totrev_high"
+	
+	
+
+
+					* Sean 20 Mar
+					
+					*Village
+					eststo clear
+					foreach y of global prescription {
+						
+						eststo: reg `y' nodrug_b i.diseasecode if VC==1, robust
+						eststo: ivregress gmm `y' (actual_b = nodrug_b ) i.diseasecode if VC==1, robust
+					}
 
 
 	
@@ -379,16 +729,36 @@ use "$dir/data/nodrug_paper.dta",clear
 		average % recommended questions and examination performed
 	IRT score
 	*/
-	global process = "diagtime_min arq arqe irtscore"
+	global process = "diagtime_min arqe irtscore"
 	
 	label var diagtime_min "diagnosis time"
-	label var arq " checklist completion % (questions)"
 	label var arqe "checklist completion % (questions and exam)"
 	
+	
+					* Sean 20 Mar
+					
+					*Village
+					eststo clear
+					foreach y of global process {
+						
+						eststo: reg `y' nodrug_b i.diseasecode if VC==1, robust
+						eststo: ivregress gmm `y' (actual_b = nodrug_b ) i.diseasecode if VC==1, robust
+					}
+	
+					*Township
+					eststo clear
+					foreach y of global process {
+					
+						eststo: reg `y' nodrug_b nodrug_a i.diseasecode  if THC==1 & disease!="T", robust
+							test nodrug_b = nodrug_a
+						eststo: ivregress gmm `y' (actual_b actual_a = nodrug_b nodrug_a) i.diseasecode  if THC==1 & disease!="T", robust
+							test actual_b = actual_a 
+							}
+							
+							
 * OLS & IV
 	
-	eststo clear
-	
+
 	levelsof(level), local(level)
 	
 	

@@ -14,7 +14,7 @@ set logtype t
 
 * Created by:		Wei Chang
 * Date created: 	2Feb2018
-*Last Modified:		18 Mar 2018   Sean
+*Last Modified:		27 Apr 2018   Sean
 
 ***********************
 
@@ -33,24 +33,92 @@ set maxvar 20000
 *use "$dir/raw/SP_total_dataset_1oct2017.dta",clear
 use "$dir/data/raw/SP_total_dataset_1oct2017.dta",clear
 
+
+/* 
+ID Variables
+ID
+VillageCode - 251 Distinct
+Towncode - 218 distinct
+
+*/
+
+
+/* Break Out Heuristics Data */
+
+preserve
+	
+	keep if ruleofthumb==1
+	drop *_raw
+	
+	forvalues i = 1(1)10{
+		ren thc_t_i_distypeD`i'  thc_t_i_D`i'
+		
+		ren vc_a_i_distypeD`i' vc_a_i_D`i'
+		
+		ren vc_a_i_distypeD`i'a vc_a_i_D`i'a
+		
+		}
+		
+	forvalues i = 1(1)10{
+		g ROT_disease_`i' = ""
+		g ROT_num_`i'=.
+			}
+			
+	g disease_lc = "a" if disease=="A"
+		replace disease_lc = "d" if disease=="D"
+		replace disease_lc = "t" if disease=="T"
+	
+	foreach l in a d t{
+		forvalues i = 1(1)10{
+			replace ROT_disease_`i' = thc_`l'_i_D`i' if level=="Township" & disease_lc=="`l'"
+			replace ROT_disease_`i' = vc_`l'_i_D`i' if (level=="Migrant" |  level=="Village") & disease_lc=="`l'"
+			
+			replace ROT_num_`i' = thc_`l'_i_D`i'a if level=="Township" & disease_lc=="`l'"
+			replace ROT_num_`i' = vc_`l'_i_D`i'a if (level=="Migrant" |  level=="Village") & disease_lc=="`l'"
+			
+			}
+	}
+	
+
+	keep ID disease level doctorid ROT*
+
+	save "$dir/data/ROT.dta", replace
+	
+restore
+
+
+
 /*-------
 Step 1: Get sample readay
 --------*/	
-	des CH disease ruleofthumb dupl_vc_spv_tb ID nodrug_b nodrug_a vignette datainfo
 	
+	drop if ruleofthumb==1 // drop ROT
 
-	drop if CH==1
+	drop if CH==1 // drop county
 	
-*	drop if disease=="T" & THC==1
+*	drop if disease=="T" & THC==1 // Tuberculosis in THCs not in experiment
 	
-	drop if ruleofthumb == 1
+	*Clean up villages
+	*drop if dupl_vc_spv_tb==1  // 10 villages have SPs visited two village clinics and keep the largest or finished one
+	bys villagecode: egen duplvill_m = max(dupl_vc_spv_tb)
+	drop if duplvill_m==1
 	
-	drop if dupl_vc_spv_tb==1  // 10 villages have SPs visited two village clinics and keep the largest or finished one
+	*Multiple SP or vig...drop odd unmatched
+	drop if ID == "SPV_A1106101"  // VC 11061 has a TB visit. drop angina
+	drop if ID == "VIG_A1106101" 
+	drop if ID == "VIG_A2108201" 
+	
+	// 210 remaining with both additional 7 odd...
+	
+	*Townships
+	// Towncode 1106 - D only V,SP
+	// 1410, 1501, 1510, 2610, 3 SP only
+	
+	g thc_nd_a = (THCNoDrugTime=="开处方前") & level=="Township"
+		replace thc_nd_a=. if level!="Township"
 
-	drop if ID == "SPV_A1106101"  // VC 11061 has a TB visit. To consistent with TB paper, drop this
-	
-	bys level: ta nodrug_b if vignette == 0, m
-	*bys level: ta nodrug_a if vignette == 0, m
+	g thc_nd_b = (THCNoDrugTime=="一开始") & level=="Township"
+		replace thc_nd_a=. if level!="Township"
 	
 	bys level: ta nodrug_b nodrug_a if vignette == 1,m
 	replace nodrug_b = . if vignette == 1 & migrant == 1 & nodrug_b == 0
@@ -67,15 +135,10 @@ Step 1: Get sample readay
 	
 	ta nodrug_b nodrug_a if datainfo == "SPV"
 	
-	drop if datainfo == "VIG" | datainfo == "VIG_DOC"
+	drop if datainfo == "VIG" | datainfo == "VIG_DOC" // 13 obs with no SP
 	
 	
 	drop if ID == "SPV_DM111" // too many missing for outcome vars
-	
-	
-	ta level vignette,m
-	ta datainfo vignette,m
-	
 	
 /*	
 	The total sample is 1517
@@ -95,20 +158,20 @@ Step 2: Vignette type 2 - Q10 section
 
 	preserve
 	
-	keep if vignette == 1
+			keep if vignette == 1
 
-	keep ///
-		diarrhea angina tuberc THC VC MVC doctorid ID towncode countycode disease level ///
-		vignette groupcode ///
-		Q10_drugpres Q10_numofdrug Q10_antibiotic ///
-		Q10_corrdrug Q10_pcorrdrug Q10_corrtreat Q10_pcorrtreat Q10_referral ///
-		age male hiedu income pracdoc datainfo
-		
-	g type = 2
+			keep ///
+				diarrhea angina tuberc THC VC MVC doctorid ID towncode countycode disease level ///
+				vignette groupcode ///
+				Q10_drugpres Q10_numofdrug Q10_antibiotic ///
+				Q10_corrdrug Q10_pcorrdrug Q10_corrtreat Q10_pcorrtreat Q10_referral ///
+				age male hiedu income pracdoc datainfo
+				
+			g type = 2
 
-	rename Q10_* *
-	
-	save "$dir/data/vig_type_2.dta", replace
+			rename Q10_* *
+			
+			save "$dir/data/vig_type_2.dta", replace
 	restore
 	
 	
@@ -116,67 +179,48 @@ Step 2: Vignette type 2 - Q10 section
 	append using "$dir/data/vig_type_2.dta", nolabel
 	
 	
-	replace type = 1 if type == . & vignette == 1
-	replace type = 0 if type == . & vignette == 0
-	replace ID = "Q10_" + ID if type == 2
+	replace type = 1 if type == . & vignette == 1 // vignettes
+	replace type = 0 if type == . & vignette == 0 // SP
+	replace ID = "Q10_" + ID if type == 2 // unique ID
 	replace vignette = . if type == 2
 	ta type vignette, m
 	
-	g spvig1 = 1 if vignette == 0
-	replace spvig1 = 0 if type == 1
-	ta spvig1 vignette, m
-	
-	g spvig2 = 1 if vignette == 0
-	replace spvig2 = 0 if type == 2
-	ta spvig2 vignette, m
-	
-	recode vignette (1=0) (0=1), gen(newvignette)
-	
-	recode type (2=0) if vignette !=0 , gen(vig1vig2)
-	ta vig1vig2 vignette, m
 	
 	label define type 0 "SP" 1 "Vignette type 1" 2 "Vignette type 2"
 	label values type type
 	
-	drop newtype
-	
-	label var vig1vig2 ""
 		
+	global idvars ID doctorid towncode countycode type level disease datainfo VC THC MVC 
+	
+	
+	
+/*-------
+Treatmewnt Vars
+--------*/	
+	
+	
+gen actual_b = nodrug_b
+replace actual_b = 0 if nodrug_b == 1 & nodrug ==0
+label var actual_b "actual story_beginning"
+
+gen actual_a = nodrug_a
+replace actual_a = 0 if nodrug_a == 1 & nodrug ==0
+label var actual_a "actual story_end"	
+	
+	
+global treatvars nodrug_b nodrug_a actual_a actual_b thc_nd_a thc_nd_b THCorder_first-THCNoDrugTime
+
 
 /*-------
 Step 3: Main outcome variables 
 --------*/	
-	
-	ta type
-	
-	list ID corrdrug referral if diagtime_min ==. & type == 0
-	
-	des arq arqe are
-	label list type
-	
 
 	*process vars : diagtime_min diagtime arq arqe irtscore
-	global process "diagtime_min diagtime arq arqe are irtscore"
-						// NOTE all we care about is arqe here
-
-	foreach x of global process {
-			di "missing values for SP or vignette interactions: `x'"
-			count if `x' == . & type != 2
-		}
-					// CODING HINT: You may miss a lot of missing s if you count this way, try:
-					count if missing(are)==1 & type != 2
+	global process "diagtime_min diagtime arqe  irtscore"
 	
-	*diagnosis vars : gavediag corrdiag wrongdiag 
-	global diagnosis "gavediag corrdiag wrongdiag pcorrdiag"
-
-	foreach x of global diagnosis { 
-			di "missing values for SP or vignette interactions: `x'"
-			count if `x' == . & type != 2
-		}
-		
+	// irtscore 
+	// theta_new missing for migrant
 	
-	des corrdrug drugpres
-	tab corrdrug drugpres
 		
 	* Unncessary/useless drug
 	recode corrdrug (1=0) (0=1) if drugpres==1, gen(uselessdrug)
@@ -252,6 +296,24 @@ Step 3: Main outcome variables
 		sum any_high_profit num_high_profit
 		tab any_high_profit, m
 		
+		
+		* generate low-profit drug = 1 if any low-profit drug was given
+		egen any_low_profit = anymatch(high_profit*),v(0)
+		replace any_low_profit = . if m_high_profit == 11
+
+		label var any_low_profit "any low profit drug on list"
+		
+		* generate number of high-profit drugs prescribed
+		gen num_low_profit = (11 - m_high_profit) - num_high_profit
+		label var num_low_profit "number of low profit drugs"
+		
+		sum any_low_profit num_high_profit
+		tab any_low_profit, m
+		
+
+		
+		// NOT DEFINED FOR TYPE 2
+		
 /*-------
 Step 4: Main control vars
 --------*/	
@@ -261,7 +323,7 @@ Step 4: Main control vars
 		doctorid 
 		thc_f_b_f04 vc_f_b_d2_6 vc_f_b_d2_14 thc_f_b_f10 (related to revenue)*/
 	
-	global control1 = "towncode countycode THC VC MVC angina diarrhea tuberc groupcode doctorid thc_f_b_f04 vc_f_b_d2_14 thc_f_b_f10 vc_f_b_d2_6"
+	global control1 = " groupcode thc_f_b_f04 vc_f_b_d2_14 thc_f_b_f10 vc_f_b_d2_6"
 	
 	foreach x of global control1 {
 			di "missing count: variable - `x'"
@@ -297,17 +359,19 @@ Step 4: Main control vars
 Step 5: Clean data for nodrug paper
 --------*/		
 
-	global arm "nodrug*"
 	
-	global chi_meds "thc_t_v_Q9_9 vc_t_v_Q9_9 ch_t_v_Q9_9 thc_t_v_Q9_10 vc_t_v_Q9_10 ch_t_v_Q9_10"
+	global chi_meds "thc_t_v_Q9_9 vc_t_v_Q9_9 thc_t_v_Q9_10 vc_t_v_Q9_10 " // ch_t_v_Q9_10  ch_t_v_Q9_9 
 	
-	des $process $diagnosis $treatment $control1 $control2 $control3 $arm $chi_meds
+	des $idvars $treatvars  $process $diagnosis $treatment $control1 $control2 $control3 $arm $chi_meds
 	
-	keep $process $diagnosis $treatment $control1 $control2 $control3 $arm ///
-		type patientload drugfee totfee $chi_meds any_high_profit num_high_profit 
+
+	keep $idvars $treatvars $process $diagnosis $treatment $control1 $control2 $control3 ///
+		 patientload drugfee totfee $chi_meds any_high_profit num_high_profit  any_low_profit num_low_profit
 					
-					// Cannot drop certain ID vars: type vignette etc...
+	order $idvars $treatvars $process $diagnosis $treatment $control1 $control2 $control3 ///
+		 patientload drugfee totfee $chi_meds any_high_profit num_high_profit  any_low_profit num_low_profit
 
-
+	 
+		 
 	compress
 	save "$dir/data/nodrug_paper.dta",replace

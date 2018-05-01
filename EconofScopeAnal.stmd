@@ -1,0 +1,47 @@
+% Econ of Scope Analysis
+% Sean Sylvia	
+% 30 Apr 2018
+
+# Analysis for Economies of Scope
+
+Analysis Sections:
+
+1. A
+2. B
+3. C
+
+## Preliminaries
+
+```s/
+	qui {
+	global dir = "/Users/sean/Dropbox (Personal)/Research/Papers/Returns to Scope" // Sean
+	cd "$dir"
+	}
+```
+
+Bring in the analysis dataset:
+
+```s
+	use "$dir/data/nodrug_paper.dta",clear
+
+	su irtscore
+```
+
+Running regressions
+
+Specification 1: $y = \alpha + \beta X + e$
+
+
+```s/
+    eststo clear
+    quietly eststo: regress drugpres nodrug_b nodrug_a  if THC==1 & type==0, vce(robust)
+    quietly eststo: regress numofdrug nodrug_b nodrug_a if THC==1 & type==0, vce(robust)
+    esttab, b(%9.3fc) se(%9.3fc) ///
+		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+		scalar(pval_ab contmean) label  nobase nogap mti ///
+		title("Effects on drug prescriptions") ///
+		addnote("Regressions include township and case fixed effects.")
+```
+
+
+

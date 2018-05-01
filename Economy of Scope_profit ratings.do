@@ -3,6 +3,8 @@ clear all
 set more off
 set logtype t
 
+test
+
 ***********************
 * Project: 			Economy of Scope
 * Goal: 			Drug profitability ratingsn
