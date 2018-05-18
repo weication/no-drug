@@ -2,46 +2,1395 @@
 % Sean Sylvia	
 % 30 Apr 2018
 
-# Analysis for Economies of Scope
+# Analysis - Economies of Scope
 
-Analysis Sections:
+Sections:
 
-1. A
-2. B
-3. C
+1. Experiment 1 -- Township Health Centers
+2. Experiment 2 -- Private Migrant Clinics
+3. Experiment 3 -- Village Clinics
+4. Experiment 4 -- Public and Private Optical Shops
 
-## Preliminaries
 
 ```s/
 	qui {
+	*Preliminaries
 	global dir = "/Users/sean/Dropbox (Personal)/Research/Papers/Returns to Scope" // Sean
 	cd "$dir"
+
+	*Bring in Data
+	use "$dir/data/nodrug_paper.dta",clear
 	}
 ```
 
-Bring in the analysis dataset:
+## Experiment 1 -- Township Health Center Experiment
+
+Notes:
+
++ Three visits per clinic
+
++ Interactions randomized to:
+
+  + control = Status quo
+
+  + pre-diagnosis (nodrug_b) = Begining of interaction
+
+  + post-diagnosis (nodrug_a) = Before treatment
+
++ TB interactions not included in randomization
+
++ Within each clinic, either diarrhea or angina randomized to one of treatment groups
+
++ Which treatment in each clinic was random
+
++ Also randomized: Disease order, treatment-control order, SP to clinic
+
+
+### Experimental Design
+
+Distribution of treatment:
 
 ```s
-	use "$dir/data/nodrug_paper.dta",clear
-
-	su irtscore
+	ta arm disease if THC==1 & type==0
+	ta nodrug_b nodrug_a if THC==1 & type==0 & diseasecode!=3
 ```
 
-Running regressions
-
-Specification 1: $y = \alpha + \beta X + e$
+### Balance
 
 
 ```s/
-    eststo clear
-    quietly eststo: regress drugpres nodrug_b nodrug_a  if THC==1 & type==0, vce(robust)
-    quietly eststo: regress numofdrug nodrug_b nodrug_a if THC==1 & type==0, vce(robust)
-    esttab, b(%9.3fc) se(%9.3fc) ///
-		starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
-		scalar(pval_ab contmean) label  nobase nogap mti ///
-		title("Effects on drug prescriptions") ///
-		addnote("Regressions include township and case fixed effects.")
+	table1 if THC==1 & type==0, vars(irtscore_v contn \ age contn \ male bin \ hiedu bin \ ///
+			income contn \ experience contn \ patientload contn \ totrev contn) ///
+			by(arm) format(%2.1f) one percent
+			*/ saving("$dir/output/nodrug_tables",sheet("balance_`l'", replace)) */
 ```
+
+
+### Effects on Drug Prescription (Unconditional)
+
+
+
+Specification 1: $y = \alpha + \beta_1 Prediagnosis + \beta_2 Postdiagnosis + \delta_d + \delta_s + \delta_c + \varepsilon$
+
+where:
+
++ $\delta_d$ is disease case fe
+
++ $\delta_s$ is SP fe
+
++ $\delta_c$ is county fe
+
++ Robust se
+
+
+**Summary:** Significant negative effects on all outcomes. No difference in effect between pre- and post-diagnosis treatments (P-value is pval_ab). 
+
+Issues:
+
+Think about creating indices (interaction-level profit index + other)? Will give more power to test across treatments.
+
+```s/
+		
+		global prescription1 = "drugpres numofdrug numedl numnonedl antibiotic chi_med totfee"
+		global prescription2 = "any_high_profit num_high_profit any_low_profit num_low_profit"
+
+		eststo clear
+		qui foreach y of global prescription1 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode i.groupcode  if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(countycode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include SP, case, and county fixed effects.")
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode i.groupcode  if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(countycode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include SP, case, and county fixed effects.")
+
+```
+
+
+**Variable Definitions:**
+
+drupres = Drugs prescribed (0/1)
+
+numofdrug = Number of drugs prescribed
+numedl = Number of drugs on the Essential Drug List (Note: Drugs on EDL were more likely subject to the Zero-markup Policy which set prices for drugs on the list)
+
+numnonedl = Number of drugs off the Essential Drug List  
+
+antibiotic = whether an antibiotic was prescribed 
+
+chi_med = whether chinese medicine was prescribed 
+
+totfee = total fee charged to the SP (includes both drugs & consultation fees, we are unable to seperate)
+
+any_high_profit = Any `high profit' drug prescribed (see below)
+
+num_high_profit = number of `high profit' drug prescribed
+
+any_low_profit = Any low profit drug prescribied
+
+num_low_profit = Number of low profit drugs prescribed
+
+
+Last four variables were determined as follows:
+
+1) A list of the 30 most commonly prescribed drugs (in SP visits) was generated
+2) 8 key informants were asked to rate each drug 1 to 5 in profitability
+3) Inter-rater reliability was analyzed and one respondent was thrown out that differed from others
+4) The remaining 7 ratings were used to generate a profitability index (using -polychoricpca-)
+5) Drugs with index > p50 were defined as high profit; those with index < p50 defined as low profit
+
+
+
+### Effects on Drug Prescription (Conditional on any prescription)
+
+Same specification as above
+
+**Summary:** Generally, effects on likely high profit margins, but no differences across treatments. Significant negative effects Number of Non-EDL drugs (both treatments), Chinese Medicine (pre-diagnosis), total fees chaged (both treatments), any high-profit (pre-diagnosis), Numer of high-profit, Any low-profit (post-dignosis), Number low-profit. No difference in effect between pre- and post-diagnosis treatments.
+
+Issues:
+After adjusting for multiple hypotheses the p<0.1 results will most likely go away.
+
+```s/
+		global prescription1 = "numofdrug numedl numnonedl antibiotic chi_med totfee"
+		global prescription2 = "any_high_profit num_high_profit any_low_profit num_low_profit"
+
+		eststo clear
+		qui foreach y of global prescription1 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode i.groupcode  if THC==1 & diseasecode!=3 & type==0 & drugpres==1, vce(robust) absorb(countycode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include SP, case, and county fixed effects.")
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode i.groupcode  if THC==1 & diseasecode!=3 & type==0 & drugpres==1, vce(robust) absorb(countycode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include SP, case, and county fixed effects.")
+
+```
+
+
+
+
+
+### Effects on High/Low Profit, Conditional on prescription of drug on profit list
+
+**Summary:** Significant reduction in high-profit drugs. Effect significantly larger with pre-diagnosis treatment. No effect on low-profit.
+
+Issues: A bit hard to interpret given condition on prescribing something on commonly prescribed list. Important to contrast b/t low adn high profit results. Run formal test?
+
+
+```s/
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode i.groupcode  if THC==1 & diseasecode!=3 & type==0 & (any_high_profit==1 | any_low_profit==1), vce(robust) absorb(countycode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include SP, case, and county fixed effects.")
+
+```
+
+### Re-run with second specification (Facility FE)
+
+Specification 2: $y = \alpha + \beta_1 Prediagnosis + \beta_2 Postdiagnosis + \delta_d +  \delta_f + \varepsilon$
+
+where:
+
++ $\delta_d$ is disease case fe
+
++ $\delta_f$ is facility fixed effects
+
+
+**Summary:** Std Err much larger with Town FE.  Stick with SP + county FE? 
+
+
+```s/
+		
+		global prescription1 = "drugpres numofdrug totfee numedl numnonedl antibiotic chi_med"
+		global prescription2 = "any_high_profit num_high_profit any_low_profit num_low_profit"
+
+		eststo clear
+		qui foreach y of global prescription1 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(towncode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+				title("Effects on drug prescriptions") 
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode  if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(towncode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions") 
+
+```
+
+
+### Effects on Drug Prescription (Conditional on any prescription)
+
+
+
+
+```s/
+
+		global prescription1 = "numofdrug totfee numedl numnonedl antibiotic chi_med"
+		global prescription2 = "any_high_profit num_high_profit any_low_profit num_low_profit"
+		
+		eststo clear
+		qui foreach y of global prescription1 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode  if THC==1 & diseasecode!=3 & type==0 & drugpres==1, vce(robust) absorb(towncode) 
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+				title("Effects on drug prescriptions") 
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode   if THC==1 & diseasecode!=3 & type==0 & drugpres==1, vce(robust) absorb(towncode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions")
+
+```
+
+
+### Effects on High/Low Profit, Conditional on prescription of drug on profit list
+
+```s/
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode  if THC==1 & diseasecode!=3 & type==0 & (any_high_profit==1 | any_low_profit==1), vce(robust) absorb(towncode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include SP, case, and county fixed effects.")
+
+```
+
+
+
+### Effects on Other Dimensions of Treatment
+
+**Summary:** No effects on treatment outcomes using either specification.
+
+Specification 1: $y = \alpha + \beta_1 Prediagnosis + \beta_2 Postdiagnosis + \delta_d + \delta_s + \delta_c + \varepsilon$
+
+where:
+
++ $\delta_d$ is disease case fe
+
++ $\delta_s$ is SP fe
+
++ $\delta_c$ is county fe
+
+
+**Variable Definitions:**
+
+corrtreat = Treatment is fully correct
+
+pcorrtreat = Treatment partially correct
+
+corrdrug = Correct drugs prescribed
+
+referral = referred to uppoer level facility
+
+
+
+```s/
+		
+		global treatment = "corrtreat pcorrtreat corrdrug referral"
+		
+		label var corrtreat "correct treatment"
+		label var pcorrtreat "partially correct treatment"
+		label var corrdrug "correct drug"
+		label var referral "referral"
+
+		eststo clear
+		qui foreach y of global treatment {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode i.groupcode  if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(countycode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+				title("Effects on treatment outcomes") ///
+				addnote("Regressions include SP, case, and county fixed effects." ///
+				"Partially correct treatment includes prescribing unnecessary drugs.")
+
+
+```
+
+
+Specification 2: $y = \alpha + \beta_1 Prediagnosis + \beta_2 Postdiagnosis + \delta_d +  \delta_f + \varepsilon$
+
+where:
+
++ $\delta_d$ is disease case fe
+
++ $\delta_f$ is facility fixed effects
+
+
+
+```s/
+
+		eststo clear
+		qui foreach y of global treatment {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(towncode)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+				title("Effects on treatment outcomes") 
+
+
+```
+
+
+
+### Effects on Process Outcomes
+
+**Summary:** Significant reductions in process quality for pre-treatment. Oddly finding some sig effects of post-dignosis treatment with county FE. Effects mainly coming from Angina case. Dataset has been checked, Xuehao now going back and checking raw data and recordings to figure out where this is coming from. With facility FE, effects of post-treament are insig.
+
+#### Tables
+
+Specification 1: $y = \alpha + \beta_1 Prediagnosis + \beta_2 Postdiagnosis + \delta_d + \delta_s + \delta_c + \varepsilon$
+
+where:
+
++ $\delta_d$ is disease case fe
+
++ $\delta_s$ is SP fe
+
++ $\delta_c$ is county fe
+
+**Variable Definitions:**
+
+diagtime_min = diagnosis tiem in mins (from recordings)
+
+arqe = % of checklist items completed (questiosn and exams)
+
+irtscore = quality index (theta) (Das & Hammer 2005)
+
+
+Both diseases
+
+```s/
+
+	global process = "diagtime_min arqe irtscore"
+	
+	label var diagtime_min "diagnosis time"
+	label var arqe "checklist completion % (questions and exam)"
+
+	eststo clear
+	qui foreach y of global process {		
+			eststo, title("`y'"): areg `y' nodrug_b nodrug_a i.diseasecode i.groupcode  if THC==1 & diseasecode!=3 & type==0, vce(robust) absorb(countycode)
+					test nodrug_b = nodrug_a 
+						estadd scalar pval_ab = `r(p)'
+					su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+						estadd scalar conmean = `r(mean)'
+			}
+
+			esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+			starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+			scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+			title("Effects on process quality") ///
+			addnote("Regressions include SP, case, and county fixed effects.")
+
+```
+
+Angina Only
+
+```s/
+
+	eststo clear
+	qui foreach y of global process {		
+			eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode i.groupcode  if THC==1 & diseasecode==1 & type==0, vce(robust) absorb(countycode)
+					test nodrug_b = nodrug_a 
+						estadd scalar pval_ab = `r(p)'
+					su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+						estadd scalar conmean = `r(mean)'
+			}
+
+			esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+			starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+			scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+			title("Effects on process quality -- Angina") ///
+			addnote("Regressions include SP, case, and county fixed effects.")
+
+```
+
+Diarrhea Only
+
+```s/
+
+	eststo clear
+	qui foreach y of global process {		
+			eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode i.groupcode  if THC==1 & diseasecode==2 & type==0, vce(robust) absorb(countycode)
+					test nodrug_b = nodrug_a 
+						estadd scalar pval_ab = `r(p)'
+					su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+						estadd scalar conmean = `r(mean)'
+			}
+
+			esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+			starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+			scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+			title("Effects on process quality -- Diarrhea") ///
+			addnote("Regressions include SP, case, and county fixed effects.")
+
+```
+
+Facility fixed effects
+
+Specification: $y = \alpha + \beta_1 Prediagnosis + \beta_2 Postdiagnosis + \delta_d +  \delta_f + \varepsilon$
+
+where:
+
++ $\delta_d$ is disease case fe
+
++ $\delta_f$ is facility fixed effects
+
+
+```s/
+
+	eststo clear
+	qui foreach y of global process {		
+			eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode if THC==1 & diseasecode!=3& type==0, vce(robust) absorb(towncode)
+					test nodrug_b = nodrug_a 
+						estadd scalar pval_ab = `r(p)'
+					su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+						estadd scalar conmean = `r(mean)'
+			}
+
+			esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+			starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+			scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+			title("Effects on process quality -- Facility FE") ///
+			addnote("Regressions include case and facility fixed effects.")
+
+```
+
+
+#### Plots
+
+
+Distribution of IRT score by treatment arm: (Only clinics with pre-diagnosis treatment)
+
+```s/
+	
+	distplot irtscore if THC==1 & diseasecode!=3 & thc_nd_b==1 & type==0, over (arm) ///
+	title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+	legend(label(1 "control") label(2 "pre-diagnosis") rows(1) size(small)) ///
+	lcolor(gray black black) lpattern(shortdash solic dash) 
+
+	graph export fig1a.png, width(300) replace
+```
+
+![THC: Pre-diagnosis vs Control](fig1a.png)
+
+
+Post-Diagnosis vs Control (Only clinics with post-diagnosis treatment)
+
+```s/
+
+	distplot irtscore if THC==1 & diseasecode!=3 & thc_nd_a==1 & type==0, over (arm) ///
+		title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+		legend(label(1 "control") label(2 "post-diagnosis")  ///
+			rows(1) size(small)) lcolor(gray black black) ///
+			lpattern(shortdash solic dash) 
+
+	graph export fig1b.png, width(300) replace
+```
+
+![THC: Post-diagnosis vs Control](fig1b.png)
+
+All
+
+```s/
+
+	distplot irtscore if THC==1 & diseasecode!=3 & type==0, over (arm) ///
+		title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+		legend(label(1 "control") label(2 "post-diagnosis")  ///
+			rows(1) size(small)) lcolor(gray black black) ///
+			lpattern(shortdash solic dash) 
+
+	graph export fig1c.png, width(300) replace
+```
+
+![THC: Process](fig1c.png)
+
+
+
+## Experiment 2 -- Private Migrant Clinics (Xi'an)
+
+Notes:
+
++ Interactions randomized to:
+
+  + control = Status quo
+
+  + pre-diagnosis (nodrug_b) = Begining of interaction
+
+  + post-diagnosis (nodrug_a) = Before treatment
+
++ TB interactions included
+
++ Randomized within clinic to disease
+
++ Also randomized: Disease order, treatment-control order, SP to clinic
+
+
+**Summary:** 
+
+Drugs: Neg effects on drug prescription, stronger effects from pre-diag treatment, but not different from post-diag. Muted effects on low vs high profit.
+
+Treatment: Significant effects on correct treatment and probability of referral for pre-diagnosis treatment.
+
+Process: Significant negative effects of pre-diagnossis treament. Effect larger than that of post-diagnosis for % of questions and exams.
+
+Issues:
+
+How to reconcile neg effect on process + positive on treatment? Driven by referrals w/ minimal questioning
+
+
+### Experimental Design
+
+Distribution of treatment:
+
+```s/
+	ta arm disease if MVC==1 & type==0
+	ta nodrug_b nodrug_a if MVC==1 & type==0
+```
+
+###Balance
+
+
+```s/
+	table1 if MVC==1 & type==0, vars(age contn \ male bin \ hiedu bin \ ///
+			income contn \ experience contn \ patientload contn \ totrev contn \ net_rev contn) ///
+			by(arm) format(%2.1f) one percent
+			*/ saving("$dir/output/nodrug_tables",sheet("balance_`l'", replace)) */
+```
+
+
+### Effects on Drug Prescription (Unconditional)
+
+
+
+Specification: $y = \alpha + \beta_1 Prediagnosis + \beta_2 Postdiagnosis + \delta_d +  \delta_f + \varepsilon$
+
+where:
+
++ $\delta_d$ is disease case fe
+
++ $\delta_f$ is facility fixed effects
+
+
+```s/
+		
+		global prescription1 = "drugpres numofdrug totfee numedl numnonedl antibiotic chi_med"
+		global prescription2 = "any_high_profit num_high_profit any_low_profit num_low_profit"
+
+		eststo clear
+		qui foreach y of global prescription1 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode if MVC==1  & type==0, vce(robust) absorb(doctorid)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) ///
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include case and facility fixed effects.")
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode  if MVC==1  & type==0, vce(robust) absorb(doctorid)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// 
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include case and facility fixed effects.")
+
+```
+
+
+### Effects on Drug Prescription (Conditional on any prescription)
+
+
+```s/
+
+		global prescription1 = "numofdrug totfee numedl numnonedl antibiotic chi_med"
+		global prescription2 = "any_high_profit num_high_profit any_low_profit num_low_profit"
+		
+		eststo clear
+		qui foreach y of global prescription1 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode  if MVC==1  & type==0 & drugpres==1, vce(robust) absorb(doctorid) 
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+				title("Effects on drug prescriptions") 
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode   if MVC==1  & type==0 & drugpres==1, vce(robust) absorb(doctorid)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions")
+
+```
+
+### Effects on High/Low Profit, Conditional on prescription of drug on profit list
+
+
+```s/
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode if MVC==1  & type==0 & (any_high_profit==1 | any_low_profit==1), vce(robust) absorb(doctorid)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include SP, case, and county fixed effects.")
+
+```
+
+
+### Effects on Treatment
+
+Note: None prescribed correct drugs 
+
+```s/
+		
+		global treatment = "corrtreat pcorrtreat corrdrug referral"
+		
+
+		eststo clear
+		qui foreach y of global treatment {		
+				eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode   if MVC==1 &  type==0, vce(robust) absorb(doctorid)
+						test nodrug_b = nodrug_a 
+							estadd scalar pval_ab = `r(p)'
+						su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+				scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+				title("Effects on treatment outcomes") 
+
+
+```
+
+
+### Effects on Process Outcomes
+
+#### Plots
+
+Distribution of IRT score by treatment arm
+
+```s/
+	
+	distplot irtscore if MVC==1 & type==0, over (arm) ///
+	title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+	legend(label(1 "control") label(2 "pre-diagnosis") label(3 "post-diagnosis") rows(1) size(small)) ///
+	lcolor(gray black black) lpattern(shortdash solic dash) 
+
+	graph export fig3.png, width(300) replace
+```
+
+![MVC: IRT by ARM](fig3.png)
+
+
+
+#### Tables
+
+Note: Sample too small to do by disease
+
+```s/
+
+	global process = "diagtime_min arqe irtscore"
+	
+	label var diagtime_min "diagnosis time"
+	label var arqe "checklist completion % (questions and exam)"
+
+	eststo clear
+	qui foreach y of global process {		
+			eststo, title("`y'"): areg `y' nodrug_b nodrug_a  i.diseasecode  if MVC==1 & type==0, vce(robust) absorb(doctorid)
+					test nodrug_b = nodrug_a 
+						estadd scalar pval_ab = `r(p)'
+					su `y' if nodrug_b==0 & nodrug_a==0 & e(sample)==1
+						estadd scalar conmean = `r(mean)'
+			}
+
+			esttab , b(%9.3fc) se(%9.3fc) /// using "$dir/output/THC_Drug.csv"
+			starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b nodrug_a) ///
+			scalar(pval_ab conmean) label replace nobase nogap mti compress  ///
+			title("Effects on process quality") ///
+			addnote("Regressions include SP, case, and county fixed effects.")
+
+```
+
+
+## Experiment 3 -- Village Clinics 
+
+Notes:
+
++ Interactions randomized to:
+
+  + control = Status quo
+
+  + pre-diagnosis (nodrug_b) = Begining of interaction
+
++ Only 1 Visit/clinic
+
++ TB interactions included
+
++ Randomized across clinics/disease
+
++ Also randomized: SP to clinic
+
+
+
+**Summary:** 
+
+Drugs: Neg effects on drug prescription, but only negative effects on fee conditional on prescribing drugs
+
+Treatment: Nothing
+
+Process: Nothing
+
+
+### Experimental Design
+
+Distribution of treatment:
+
+```s/
+	ta arm disease if VC==1 & type==0
+```
+
+###Balance
+
+
+```s/
+	table1 if VC==1 & type==0, vars(age contn \ male bin \ hiedu bin \ ///
+			income contn \ experience contn \ patientload contn \ totrev contn \ net_rev contn) ///
+			by(arm) format(%2.1f) one percent
+			*/ saving("$dir/output/nodrug_tables",sheet("balance_`l'", replace)) */
+```
+
+
+### Effects on Drug Prescription (Unconditional)
+
+
+Specification: $y = \alpha + \beta_1 Prediagnosis + \delta_d + \delta_s +  \delta_c + \varepsilon$
+
+where:
+
++ $\delta_d$ is disease case fe
+
++ $\delta_s$ is sp fe
+
++ $\delta_c$ is county fixed effects
+
+
+```s/
+		
+		global prescription1 = "drugpres numofdrug totfee numedl numnonedl antibiotic chi_med"
+		global prescription2 = "any_high_profit num_high_profit any_low_profit num_low_profit"
+
+		eststo clear
+		qui foreach y of global prescription1 {		
+				eststo, title("`y'"): areg `y' nodrug_b  i.diseasecode i.groupcode if VC==1  & type==0, vce(robust) absorb(countycode)
+						su `y' if nodrug_b==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) ///
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b ) ///
+				scalar( conmean) label replace nobase nogap mti compress  ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include case, SP, and county fixed effects.")
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b  i.diseasecode i.groupcode if VC==1  & type==0, vce(robust) absorb(countycode)
+						su `y' if nodrug_b==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// 
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b ) ///
+				scalar( conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include case, SP, and county fixed effects.")
+
+```
+
+### Effects on Drug Prescription (Conditional on any prescription)
+
+
+```s/
+		
+		global prescription1 = "numofdrug totfee numedl numnonedl antibiotic chi_med"
+		global prescription2 = "any_high_profit num_high_profit any_low_profit num_low_profit"
+
+		eststo clear
+		qui foreach y of global prescription1 {		
+				eststo, title("`y'"): areg `y' nodrug_b  i.diseasecode i.groupcode if VC==1  & type==0 & drugpres==1, vce(robust) absorb(countycode)
+						su `y' if nodrug_b==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) ///
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b ) ///
+				scalar( conmean) label replace nobase nogap mti compress  ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include case, SP, and county fixed effects.")
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b  i.diseasecode i.groupcode if VC==1  & type==0 & drugpres==1, vce(robust) absorb(countycode)
+						su `y' if nodrug_b==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// 
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b ) ///
+				scalar( conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include case, SP, and county fixed effects.")
+
+```
+
+
+### Effects on High/Low Profit, Conditional on prescription of drug on profit list
+
+
+```s/
+
+
+		eststo clear
+		qui foreach y of global prescription2 {		
+				eststo, title("`y'"): areg `y' nodrug_b  i.diseasecode i.groupcode if VC==1  & type==0 & (any_high_profit==1 | any_low_profit==1), vce(robust) absorb(countycode)
+						su `y' if nodrug_b==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// 
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b ) ///
+				scalar( conmean) label replace nobase nogap mti compress ///
+				title("Effects on drug prescriptions") ///
+				addnote("Regressions include case, SP, and county fixed effects.")
+
+
+```
+
+
+### Effects on Treatment
+
+```s/
+		
+		global treatment = "corrtreat pcorrtreat corrdrug referral"
+		
+
+		eststo clear
+		qui foreach y of global treatment {		
+				eststo, title("`y'"): areg `y' nodrug_b  i.diseasecode i.groupcode if VC==1  & type==0, vce(robust) absorb(countycode)
+						su `y' if nodrug_b==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// 
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b ) ///
+				scalar( conmean) label replace nobase nogap mti compress ///
+				addnote("Regressions include case, SP, and county fixed effects.")
+
+
+```
+
+
+### Effects on Process Outcomes
+
+#### Plots
+
+Distribution of IRT score by treatment arm
+
+```s/
+	
+	distplot irtscore if VC==1 & type==0, over (arm) ///
+	title("Cumulative densities of IRT scores by treatment arm", size(medium)) ///
+	legend(label(1 "control") label(2 "pre-diagnosis") label(3 "post-diagnosis") rows(1) size(small)) ///
+	lcolor(gray black black) lpattern(shortdash solic dash) 
+
+	graph export fig4.png, width(300) replace
+```
+
+![VC: IRT by ARM](fig4.png)
+
+
+
+#### Tables
+
+Pooled
+
+```s/
+
+	global process = "diagtime_min arqe irtscore"
+	
+	label var diagtime_min "diagnosis time"
+	label var arqe "checklist completion % (questions and exam)"
+
+	eststo clear
+	qui foreach y of global process {		
+				eststo, title("`y'"): areg `y' nodrug_b  i.diseasecode i.groupcode if VC==1  & type==0, vce(robust) absorb(countycode)
+						su `y' if nodrug_b==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// 
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b ) ///
+				scalar( conmean) label replace nobase nogap mti compress ///
+				addnote("Regressions include case, SP, and county fixed effects.")
+
+```
+
+Angina
+
+```s/
+
+	eststo clear
+	qui foreach y of global process {		
+				eststo, title("`y'"): areg `y' nodrug_b  i.diseasecode i.groupcode if VC==1  & type==0 & diseasecode==1, vce(robust) absorb(countycode)
+						su `y' if nodrug_b==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// 
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b ) ///
+				scalar( conmean) label replace nobase nogap mti compress ///
+				addnote("Regressions include case, SP, and county fixed effects.")
+
+```
+
+Diarrhea
+
+```s/
+
+
+	eststo clear
+	qui foreach y of global process {		
+				eststo, title("`y'"): areg `y' nodrug_b  i.diseasecode i.groupcode if VC==1  & type==0 & diseasecode==2, vce(robust) absorb(countycode)
+						su `y' if nodrug_b==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// 
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b ) ///
+				scalar( conmean) label replace nobase nogap mti compress ///
+				addnote("Regressions include case, SP, and county fixed effects.")
+
+
+```
+
+
+TB
+
+```s/
+
+
+	eststo clear
+	qui foreach y of global process {		
+				eststo, title("`y'"): areg `y' nodrug_b  i.diseasecode i.groupcode if VC==1  & type==0 & diseasecode==3, vce(robust) absorb(countycode)
+						su `y' if nodrug_b==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) /// 
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nodrug_b ) ///
+				scalar( conmean) label replace nobase nogap mti compress ///
+				addnote("Regressions include case, SP, and county fixed effects.")
+
+```
+
+## Experiment 4 -- Public and Private Optical Shops
+
+
+
+**NOTE:** Results preliminary, but wont change substantially
+
+
+
+Notes:
+
+Setup: Studnets sent in to optical shops with a pair of glasses. Tell optometrist they may need new ones. Asked to suggest pair after eye screening.
+
++ Interactions randomized to:
+
+  + control = Status quo
+
+  + pre-interaction (nosale) = Begining of interaction say will not buy glasses (need to confirm exact story) but need a prescription.
+
++ Randomization stratified across public/private shops (public shops located in public hospitals) & SP
+
++ Only 1 Visit/shop
+
++ Mix of urban and rural sample
+
++ SPs not randomized
+
+
+
+**Summary:** 
+
+
+
+### Experimental Design
+
+Distribution of treatment:
+
+```s/
+	
+	use  "$dir/data/eyesp_clean_proc.dta",clear
+
+	ta nobuy public
+
+```
+
+###Balance
+
+**To do.**
+
+### Effects on Sales
+
+
+** Variable Definitions **
+
+ex_medicine = prescription fee
+ex_screen = exam fee
+ex_total = total fee excluding glasses
+ex_regular = price of first pair when asked for regularly priced glasses
+ex_300 	= price of first pair when asked for glasses priced around 300
+ex_cheast = price of cheapest pair if purchased
+
+All in ln(x)
+
+
+Specification: $y = \alpha + \beta_1 NoBuy  + \beta_2 Public  + \beta_3 NoBuy*Public + \delta_s + \varepsilon$
+
+where:
+
++ $\delta_d$ is disease case fe
+
++ $\delta_s$ is sp fe
+
+robust se
+
+
+
+```s/
+		
+		global sales = "ex_medicine ex_screen ex_total ex_regular ex_300"
+
+		eststo clear
+		qui foreach y of global sales {		
+				eststo, title("`y'"): reg `y' nobuy  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				eststo, title("`y'"): reg `y' nobuy public nb_pub  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) ///
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nobuy public nb_pub) ///
+				scalar( conmean) label replace nobase nogap mti compress 
+
+```
+
+Including controls (gender and age of staff)
+
+```s/
+		
+		global sales = "ex_medicine ex_screen ex_total ex_regular ex_300"
+
+		eststo clear
+		qui foreach y of global sales {	
+
+				eststo, title("`y'"): reg `y' nobuy public nb_pub male_check age_check  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) ///
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nobuy public nb_pub) ///
+				scalar( conmean) label replace nobase nogap mti compress 
+
+```
+
+### Effects on Process
+
+**Varaible Definitions:**
+
+e_chart = Vision checked using e-chart
+
+gl_screen = existing pair checked
+
+dialate = Offer to dialate 
+
+sc_other = Suggested other screening or test
+
+ph_d = Conducted eye distance check
+
+auto_screen = Conducted auto refraction test
+
+ob_screen = Used test lenses to check vision
+
+
+```s/
+		
+		global process1 = "e_chart gl_screen dialate sc_other"
+		global process2 = "ph_d auto_screen ob_screen"
+
+		eststo clear
+		qui foreach y of global process1 {		
+				eststo, title("`y'"): reg `y' nobuy  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				eststo, title("`y'"): reg `y' nobuy public nb_pub  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) ///
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nobuy public nb_pub) ///
+				scalar( conmean) label replace nobase nogap mti compress 
+
+
+		eststo clear
+		qui foreach y of global process2 {		
+				eststo, title("`y'"): reg `y' nobuy  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				eststo, title("`y'"): reg `y' nobuy public nb_pub  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) ///
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nobuy public nb_pub) ///
+				scalar( conmean) label replace nobase nogap mti compress 
+
+```
+
+### Effects on (In-)Accuracy
+
+**Variable Definitions:**
+
+Note: Need to check on exact definitions here.
+
+vdd_better_auto = 
+
+vdd_better_auto_1d = 
+
+vdd_better_final =
+
+vdd_better_final_1d =
+
+vdd_worse_auto =
+
+vdd_worse_auto_1d = 
+
+vdd_worse_final = 
+
+vdd_worse_final_1d =
+
+```s/
+		
+		global accuracy1 = "vdd_better_auto vdd_better_auto_1d vdd_better_final" 
+		global accuracy2 = "vdd_better_final_1d vdd_worse_auto vdd_worse_auto_1d" 
+		global accuracy3 = "vdd_worse_final vdd_worse_final_1d"
+
+		eststo clear
+		qui foreach y of global accuracy1 {		
+				eststo, title("`y'"): reg `y' nobuy  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				eststo, title("`y'"): reg `y' nobuy public nb_pub  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) ///
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nobuy public nb_pub) ///
+				scalar( conmean) label replace nobase nogap mti compress 
+
+
+		eststo clear
+		qui foreach y of global accuracy2 {		
+				eststo, title("`y'"): reg `y' nobuy  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				eststo, title("`y'"): reg `y' nobuy public nb_pub  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) ///
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nobuy public nb_pub) ///
+				scalar( conmean) label replace nobase nogap mti compress 
+
+		eststo clear
+		qui foreach y of global accuracy3 {		
+				eststo, title("`y'"): reg `y' nobuy  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				eststo, title("`y'"): reg `y' nobuy public nb_pub  i.enumeratorid, vce(robust) 
+						su `y' if nobuy==0  & e(sample)==1
+							estadd scalar conmean = `r(mean)'
+
+				}
+
+				esttab , b(%9.3fc) se(%9.3fc) ///
+				starlevels( * 0.1 ** 0.05 *** 0.01) ar2(2) keep(nobuy public nb_pub) ///
+				scalar( conmean) label replace nobase nogap mti compress 
+
+```
+
+
+
+markstat using "/Users/sean/Documents/01RESEARCH/GitHub/no-drug/EconofScopeAnal.stmd", mathjax
 
 
 

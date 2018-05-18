@@ -31,82 +31,33 @@ cd "$dir"
 use "$dir/data/nodrug_paper.dta",clear
 
 
-* drop vignette type 2/Q10 observations
-*	label list type
-*	drop if type == 2
-	
 
-* recode string variables
-	encode disease, gen(diseasecode)
-	label define ldiseasecode 1 "angina" 2 "diarrhea" 3 "TB"
-	label values diseasecode ldiseasecode
-	label var diseasecode disease
-	
-	encode level, gen(levelcode)
-	label define llevelcode 1 "Migrant" 2 "Township" 3 "Village"
-	label values levelcode llevelcode
-	label var levelcode "clinic level"
-	
-* rename variables
-	des year
-	rename year experience
-	label var experience "experience"
-	
-	label var patientload "patient load"
-	
-	label var chi_med "Chinese medicine"
-	
-	label var numofdrug "Number of medicines prescribed"
-	
-/* create variable for Chinese modern/herbal drugs
-	// Need to add in other diseases
-	gen chi_med_h = .
-	replace chi_med_h = 0 if thc_t_v_Q9_9 == 0 | vc_t_v_Q9_9==0  
-	replace chi_med_h = 1 if thc_t_v_Q9_9 == 1 | vc_t_v_Q9_9==1  
-	label var chi_med_h "Chinese herbal medicine"
-	label define yesno 0 no 1 yes
-	label values chi_med_h yesno
-	
-	gen chi_med_m = .
-	replace chi_med_m = 0 if thc_t_v_Q9_10 == 0 | vc_t_v_Q9_10==0 
-	replace chi_med_m = 1 if thc_t_v_Q9_10 == 1 | vc_t_v_Q9_10==1 
-	label var chi_med_m "Chinese modern medicine"
-	label values chi_med_h yesno 
-*/
+/**********************************************************************/
+/*  SECTION 1: Experiment 1 - Township Health Centers 	 			
+    Notes: Experiement in THCs 
+  			Interactions randomized to control, start, before diagnosis
+  			TB interactions not included
+  			Within each clinic either diarrhea or angina randomized to one of treatment groups
+  			Which treatment in each clinic was random*/
+/**********************************************************************/
 
-* missing summary - SP visits
-	levelsof(level),local(level)
-	foreach l of local level {
-		di "`l'"
-		misstable sum if type == 0 & level == "`l'"
-		}
- 	
-* missing for chinese herbal and chinese modern 
-*	tab chi_med_h level if type ==0, m nof col
-*	tab chi_med_m level if type ==0, m nof col
-	
-* missing for high profit ratings
-	tab any_high_profit level if type == 0, m col
-	tab num_high_profit level if type == 0, m nof col
-	
-	tab any_low_profit level if type == 0, m col
-	tab num_low_profit level if type == 0, m nof col
-	
+ 
+/*----------------------------------------------------*/
+   /* [>   Table 1.  Experimental Design   <] */ 
+/*----------------------------------------------------*/
 
-*prepvars
-* match IRT score from vignette
-	preserve
-	keep if type == 1
-	isid doctorid disease
-	keep doctorid disease irtscore
-	rename irtscore irtscore_v
-	label var irtscore_v "IRT score from vigenette"
-	save "$dir/data/irtscore_vignette1.dta", replace
-	restore
-	
-	merge m:1 doctorid disease using "$dir/data/irtscore_vignette1.dta"
-	* dataset in memory includes both SP and vignette (type 1) interactions
-	drop _merge
+
+
+
+/*------------------------------------ End of SECTION 1 ------------------------------------*/
+
+
+
+
+
+
+
+
 	
 
 	
@@ -114,14 +65,7 @@ use "$dir/data/nodrug_paper.dta",clear
 * Table 1 - Distributions/Experimental Designs
 *************************
 
-* create treatment indicator ("arm")
-	gen byte arm = .
-	label var arm "treatment" 
-	replace arm = 1 if nodrug_a == 0 & nodrug_b == 0
-	replace arm = 2 if nodrug_a == 0 & nodrug_b == 1
-	replace arm = 3 if nodrug_a == 1 & nodrug_b == 0
-	label define larm 1 "no_treat" 2 "treat_beginning" 3 "treat_end" 
-	label values arm larm
+
 	
 
 * distribution of observations by level, disease, & treatment
@@ -161,22 +105,7 @@ use "$dir/data/nodrug_paper.dta",clear
 *************************
 
 
-* calculate clinic net revenue
-	* for THC
-	des thc* vc*
-	gen net_rev = .
-	replace net_rev = thc_f_b_f04 - thc_f_b_f10 if levelcode == 2
-	label var net_rev "clinic net revenue in 10k 2014 RMB"
-	
-	* for village & migrant clinics, we asked net revenue directly
-	replace net_rev = vc_f_b_d2_14/10000 if inlist(levelcode, 1, 3)
-	
-* create var. for total revenue
-	gen totrev = .
-	replace totrev = thc_f_b_f04 if levelcode == 2 /* township unit in raw data: wan yuan */
-	replace totrev = vc_f_b_d2_6/10000 if inlist(levelcode, 1, 3) /* change unit to wan yuan */
-	label var totrev "clinic total revenue in 10k 2014 RMB"
-	tabstat totrev net_rev, by(levelcode) stat(mean sd n)
+
 
 
 
@@ -269,68 +198,7 @@ distplot irt_norm if VC==1 & type==0, over (arm) ///
 
 
 	
-/* generate dummies for higher than median values for covars.: 
-	high/low IRT knowledge 
-	salary
-	experience
-	high patient load
-	high clinic total revenue */
-	
-	foreach var of varlist irtscore_v income experience patientload {
-		egen temp = median(`var')
-		gen `var'_high = .
-		replace `var'_high = 0 if `var' <= temp
-		replace `var'_high = 1 if `var' > temp & !missing(`var')
-		label var `var'_high "`var'>p50"
-		label define l`var'_high 0 "`var'<=p50" 1 "`var'>p50"
-		label values `var'_high l`var'_high
-		drop temp
-		}
-		
-	* for high clinic total revenue, generate dummies by level
-	
-	gen totrev_high = .
-	label var totrev_high "totrev>p50"
-	label define ltotrev_high 0 "totrev<=p50" 1 "totrev>p50
-	label values totrev_high ltotrev_high
-	
-	levelsof(level), local(level)
-	foreach l of local level {
-		egen temp = median(totrev) if level == "`l'" 
-		replace totrev_high = 0 if totrev <= temp & level == "`l'" 
-		replace totrev_high = 1 if totrev > temp & level == "`l'" & !missing(totrev)
-		drop temp
-		}
-	tab totrev_high
-		
-/* PRESCRIPTION outcomes:
-	number of drugs
-	cost of drugs --> cost of visit
-	# on EDL/Zero-profit drugs (national)
-	# off EDL/Zero-profit drugs (national)
-	Chinese modern ??
-	Chinese herbal ??
-	"High profit" Meds
-		any_high_profit
-		num_high_profit
-	*/
-	
-	* check the distribution of "number of drugs" - number of zeros
-	gen numofdrug_zero = (numofdrug == 0)
-	replace numofdrug_zero = . if numofdrug == .
-	sum numofdrug_zero
-	di "% of interactions where no drug was prescribed: " r(mean)*100 "%"
-	tab level numofdrug_zero,row nofreq
-	
-	* drugfee vs. totfee
-	sum drugfee totfee
-	misstable sum drugfee totfee if arm != .
-	* drugfee: missing ~35% --> use total SP visit fee as outcome 
 
-	replace num_high_profit = 0 if num_high_profit==. & type==0
-	replace any_high_profit = 0 if any_high_profit==. & type==0
-	replace num_low_profit = 0 if num_low_profit==. & type==0
-	replace any_low_profit = 0 if any_low_profit==. & type==0
 
 	
 /*---------------THC------------------*/
