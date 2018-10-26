@@ -366,10 +366,12 @@ Step 5: Clean data for nodrug paper
 	
 
 	keep $idvars $treatvars $process $diagnosis $treatment $control1 $control2 $control3 ///
-		 patientload drugfee totfee $chi_meds any_high_profit num_high_profit  any_low_profit num_low_profit
+		 patientload drugfee totfee $chi_meds any_high_profit num_high_profit  any_low_profit num_low_profit ///
+		 rq1_ang-rq13_ang re1_ang-re5_ang rq2_dia-rq18_dia
 					
 	order $idvars $treatvars $process $diagnosis $treatment $control1 $control2 $control3 ///
-		 patientload drugfee totfee $chi_meds any_high_profit num_high_profit  any_low_profit num_low_profit
+		 patientload drugfee totfee $chi_meds any_high_profit num_high_profit  any_low_profit num_low_profit ///
+		 rq1_ang-rq13_ang re1_ang-re5_ang rq2_dia-rq18_dia
 
 
 
@@ -501,7 +503,7 @@ Step 5: Clean data for nodrug paper
 	
 	gen totrev_high = .
 	label var totrev_high "totrev>p50"
-	label define ltotrev_high 0 "totrev<=p50" 1 "totrev>p50
+	label define ltotrev_high 0 "totrev<=p50" 1 "totrev>p50"
 	label values totrev_high ltotrev_high
 	
 	levelsof(level), local(level)
